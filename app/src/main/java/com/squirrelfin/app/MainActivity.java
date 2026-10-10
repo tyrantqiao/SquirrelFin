@@ -69,6 +69,12 @@ public class MainActivity extends Activity {
                 i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i, 2);
             });
         }
+        @JavascriptInterface public void importLedger() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("*/*");
+                i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i, 3);
+            });
+        }
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
@@ -78,11 +84,13 @@ public class MainActivity extends Activity {
             if (request == 1) {
                 try (OutputStream out = getContentResolver().openOutputStream(uri)) { out.write(pendingBackup.getBytes("UTF-8")); }
                 web.evaluateJavascript("App.toast('备份已导出')", null);
-            } else if (request == 2) {
+            } else if (request == 2 || request == 3) {
                 try (InputStream in = getContentResolver().openInputStream(uri)) {
                     ByteArrayOutputStream out = new ByteArrayOutputStream(); byte[] b = new byte[8192]; int n;
-                    while ((n = in.read(b)) != -1) { if (out.size() + n > 5_000_000) throw new IOException("Too large"); out.write(b, 0, n); }
-                    web.evaluateJavascript("App.importText(" + JSONObject.quote(out.toString("UTF-8")) + ")", null);
+                    int limit = request == 3 ? 600_000 : 5_000_000;
+                    while ((n = in.read(b)) != -1) { if (out.size() + n > limit) throw new IOException("Too large"); out.write(b, 0, n); }
+                    String callback = request == 3 ? "App.importLedgerText(" : "App.importText(";
+                    web.evaluateJavascript(callback + JSONObject.quote(out.toString("UTF-8")) + ")", null);
                 }
             }
         } catch (Exception e) { web.evaluateJavascript("App.toast('文件操作失败，请重试')", null); }

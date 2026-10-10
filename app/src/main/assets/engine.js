@@ -8,7 +8,80 @@
     if(!Number.isSafeInteger(n)||Math.abs(n)>1e14) throw Error('金额超出范围');
     return n;
   }
-  function blank() { return {version:1,assets:[],transactions:[],plans:[],executions:[]}; }
+  const expenseCategories=['餐饮','居住','交通','购物','水电通讯','医疗','教育','娱乐','人情','保险','其他'];
+  const expenseNatures={fixed:'固定支出',variable:'日常可变',occasional:'偶发支出'};
+  function blank() { return {version:1,assets:[],transactions:[],plans:[],executions:[],expenseTemplates:[]}; }
+  function expenseSummary(state,month) {
+    const expenses=state.transactions.filter(t=>t.type==='expense'&&!t.linked&&t.date.slice(0,7)===month);
+    const categories={},natures={fixed:0,variable:0,occasional:0,unclassified:0};
+    for(const t of expenses) {const category=t.category||'未分类';categories[category]=(categories[category]||0)+t.amount;natures[t.nature||'unclassified']+=t.amount;}
+    return {total:expenses.reduce((n,t)=>n+t.amount,0),categories,natures};
+  }
+  function suggestExpense(source,note) {
+    const aliases={玩:'娱乐',礼物:'人情',日常:'其他',吃:'餐饮',餐饮:'餐饮',交通:'交通',购物:'购物',居住:'居住',娱乐:'娱乐',人情:'人情',医疗:'医疗',教育:'教育',保险:'保险',水电通讯:'水电通讯'};
+    let category=aliases[source]||'其他',nature='variable';
+    if(source==='日常'||source==='居住'||source==='其他') {
+      if(/房租|租金|月租/.test(note)) {category='居住';nature='fixed';}
+      else if(/骑自行车|打车|地铁|公交/.test(note))category='交通';
+      else if(/早餐|午餐|晚餐|吃饭/.test(note))category='餐饮';
+      else if(/水费|电费|话费|网费/.test(note))category='水电通讯';
+      else if(/会员|订阅/.test(note)) {category='娱乐';nature='fixed';}
+    }
+    if(source==='礼物')nature='occasional';
+    return {category,nature};
+  }
+  function parseLedgerText(text,at) {
+    if(typeof text!=='string'||text.length>150000)throw Error('账单文字最多 15 万字');
+    if(!validDate(at))throw Error('当前日期无效');
+    const lines=text.replace(/^\uFEFF/,'').replace(/^(\s*)[“"']/,'$1').replace(/[”"'](\s*)$/,'$1').split(/\r?\n/);
+    if(lines.length>1000)throw Error('每次最多导入 1000 行，请分批处理');
+    const rows=[],errors=[];
+    lines.forEach((raw,i)=>{
+      const line=raw.trim().replace(/^[-*•]\s*/, '');if(!line)return;
+      try {
+        const m=line.match(/^(\d{4}-\d{2}-\d{2})\s+(收入|支出)([^\s]*)\s+(\S+)\s+(.+?)\s+(\d+(?:\.\d{1,2})?)(?:\s*元)?$/u);
+        if(!m)throw Error('格式应为：日期 收入/支出 分类 备注 金额（最多两位小数）');
+        const clean=v=>v.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0e\ufe0f]/gu,'');
+        if(clean(m[3]))throw Error('收入/支出后只支持表情标记');
+        if(!validDate(m[1])||m[1]>at)throw Error('日期无效或晚于今天');
+        const amount=cents(m[6]);if(amount<=0)throw Error('金额需大于 0');
+        const sourceCategory=clean(m[4]),note=m[5].trim();
+        if(!sourceCategory||sourceCategory.length>40||!note||note.length>100)throw Error('分类最多 40 字，备注需为 1–100 字');
+        const row={line:i+1,date:m[1],type:m[2]==='收入'?'income':'expense',sourceCategory,note,amount};
+        if(row.type==='expense')Object.assign(row,suggestExpense(sourceCategory,note));
+        rows.push(row);
+      }catch(e){errors.push({line:i+1,message:e.message});}
+    });
+    if(!rows.length&&!errors.length)errors.push({line:1,message:'请粘贴至少一笔账单'});
+    return {rows,errors};
+  }
+  const ledgerKey=t=>JSON.stringify([t.asset,t.date,t.type,t.amount,t.note.trim().replace(/\s+/g,' ')]);
+  function ledgerImportPreview(state,rows,at) {
+    const existing=new Set(state.transactions.filter(t=>['income','expense'].includes(t.type)&&!t.linked).map(ledgerKey)),seen=new Set();
+    return rows.map(row=>{
+      const a=state.assets.find(a=>a.id===row.asset);let error='';
+      if(!a||a.kind!=='cash')error='请选择现金账户';
+      else if(!validDate(row.date)||row.date>at)error='日期无效或晚于今天';
+      else if(row.date<a.snapshots.map(v=>v.date).sort()[0])error='早于该账户初始盘点，请更换账户或登记历史账户';
+      else if(!['income','expense'].includes(row.type)||!Number.isSafeInteger(row.amount)||row.amount<=0||row.amount>1e14||typeof row.note!=='string'||!row.note.trim()||row.note.length>100)error='收支或金额、备注无效';
+      else if(row.type==='expense'&&(!expenseCategories.includes(row.category)||!Object.hasOwn(expenseNatures,row.nature)))error='请核对支出分类';
+      const key=!error?ledgerKey(row):null,duplicate=!!key&&(existing.has(key)||seen.has(key));
+      if(key)seen.add(key);
+      return {...row,error,duplicate};
+    });
+  }
+  function importLedger(state,rows,at,makeId) {
+    if(!Array.isArray(rows)||!rows.length||rows.length>1000||!validDate(at))throw Error('请选择 1–1000 笔有效账单');
+    const preview=ledgerImportPreview(state,rows,at),bad=preview.find(r=>r.error);if(bad)throw Error('第 '+bad.line+' 行：'+bad.error);
+    const next=JSON.parse(JSON.stringify(state));
+    for(const r of preview) {
+      const t={id:makeId(),type:r.type,asset:r.asset,to:null,date:r.date,amount:r.amount,note:r.note,sourceCategory:r.sourceCategory};
+      if(r.type==='expense'){t.category=r.category;t.nature=r.nature;}
+      next.transactions.push(t);
+      next.assets.find(a=>a.id===t.asset).snapshots.filter(v=>v.date>=t.date).forEach(v=>v.confirmed=false);
+    }
+    return validate(next);
+  }
   function flow(t,id) {
     if(t.type==='transfer') return (t.to===id?t.amount:0)-(t.asset===id?t.amount:0);
     return t.asset===id ? (t.type==='income'||t.type==='deposit'?t.amount:-t.amount):0;
@@ -92,8 +165,19 @@
       if(typeof t.id!=='string'||tids.has(t.id)||!ids.has(t.asset)||!validDate(t.date)||!money(t.amount)||t.amount<=0||typeof t.note!=='string'||!['income','expense','transfer','deposit','withdraw'].includes(t.type)) fail();
       const a=s.assets.find(a=>a.id===t.asset);
       if(['item','debt'].includes(a.kind)||t.date<a.snapshots.map(v=>v.date).sort()[0]) fail();
+      if(t.category!==undefined&&(t.type!=='expense'||t.linked||!expenseCategories.includes(t.category))) fail();
+      if(t.nature!==undefined&&(t.type!=='expense'||t.linked||!Object.hasOwn(expenseNatures,t.nature))) fail();
+      if(t.sourceCategory!==undefined&&(!['income','expense'].includes(t.type)||t.linked||typeof t.sourceCategory!=='string'||!t.sourceCategory.trim()||t.sourceCategory.length>40)) fail();
       if(t.type==='transfer') {const to=s.assets.find(a=>a.id===t.to);if(!to||to.id===a.id||['item','debt'].includes(to.kind)||t.date<to.snapshots.map(v=>v.date).sort()[0]) fail();}
       tids.add(t.id);
+    }
+    if(s.expenseTemplates!==undefined) {
+      if(!Array.isArray(s.expenseTemplates)||s.expenseTemplates.length>2000) fail();
+      const templateIds=new Set();
+      for(const t of s.expenseTemplates) {
+        if(typeof t.id!=='string'||!t.id||templateIds.has(t.id)||typeof t.name!=='string'||!t.name.trim()||t.name.length>100||!money(t.amount)||t.amount<=0||!expenseCategories.includes(t.category)||!Object.hasOwn(expenseNatures,t.nature)||!['none','monthly','yearly'].includes(t.frequency)||!ids.has(t.asset)||s.assets.find(a=>a.id===t.asset).kind!=='cash') fail();
+        templateIds.add(t.id);
+      }
     }
     const pids=new Set();
     for(const p of s.plans) {
@@ -116,6 +200,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,occurrences,planStats,validate};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
