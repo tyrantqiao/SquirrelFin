@@ -4,7 +4,7 @@
 
 ## 安装与试用
 
-已公开的首版可从 [GitHub Release v0.1.0](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.0) 下载。当前 0.1.2 在本地构建，尚未发布；APK 为 `dist/SquirrelFin-0.1.2-debug.apk`，附 SHA-256 校验文件。支持 Android 8.0 及以上，建议更新 Android System WebView。开发签名仅供试用，沿用原签名以支持覆盖安装。未连接真机或模拟器，因此尚未完成安卓设备运行测试。
+当前开发版可从 [GitHub Release v0.1.2](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.2) 下载；APK 为 `dist/SquirrelFin-0.1.2-debug.apk`，附 SHA-256 校验文件。支持 Android 8.0 及以上，建议更新 Android System WebView。开发签名仅供试用，沿用原签名以支持覆盖安装。未连接真机或模拟器，因此尚未完成安卓设备运行测试。
 
 电脑预览（Node.js 18+，无第三方依赖）：
 
