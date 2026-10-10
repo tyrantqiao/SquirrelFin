@@ -56,3 +56,18 @@ Google 官方 Android SDK 35 平台和 build-tools 35.0.0 编译。安装包通�
 ## 0.1.2 发布准备（2026-10-11）
 
 27 项测试重新通过；APK SHA-256 与既有校验文件一致。使用 v0.1.2 标签发布开发签名 APK 与 SHA-256 文件，设备验证限制沿用上述记录。
+
+## 0.1.3 更新页验证（2026-10-11）
+
+- 新增设置中的应用更新页，以 `tyrantqiao/SquirrelFin` GitHub 最新正式 Release 为依据，比较数字版本，忽略预发布；要求匹配 APK 资产及 GitHub SHA-256 digest。
+- 原生下载保存私有目录中的部分文件和更新元数据，使用 HTTP Range 续传；200 响应安全重新下载，206 校验范围起点与总大小。支持暂停、失败后重试及进程重启后恢复；进程退出不承诺后台继续下载。
+- 安装前校验大小、SHA-256、包名、递增版本码、Release 版本和原签名。系统确认安装，未授权来源时打开系统设置，返回后再次点击安装。旧版本下载在覆盖更新后清理。
+- 27 项财务测试通过，JS 语法检查通过。`tests/UpdaterVersionTest.java` 经 javac/java 运行，覆盖数字版本 0.1.9 → 0.1.10、同版本、降级和大版本更新。可用 Android SDK jar 与 dist/classes 作为 classpath，编译测试时输出到 dist/test-classes。
+- 已有 npm 预览服务监听 127.0.0.1:4173，复用该服务。Chrome 无头浏览器检查 360×800 更新入口和页面，无横向溢出。注入模拟原生桥检查 available/downloading/paused/ready/latest/error 六种状态，主操作在屏内可达，Release HTML 文本转义。此检查不代表真实原生网络验证。
+- 0.1.3 APK，版本码 4，Android 8.0+；v2/v3 签名通过，证书与 0.1.2 一致。六个包内 assets SHA-256 与当前源码逐项一致。APK 与 SHA-256 文件位于 dist，不进入源码历史。新增 INTERNET 和 REQUEST_INSTALL_PACKAGES 权限，账本仍本地保存，不上传。
+
+未验证：安卓真机网络检测、实际 GitHub APK 断网续传/重启续传、SHA-256 与签名失败后的设备表现、来源安装权限和覆盖安装。没有连接真机/模拟器；没有发布 0.1.3 Release。更新要求 GitHub 可达且最新 Release 提供匹配 APK 与 digest，服务器不支持 Range 时会重下；无后台服务、无自动安装。
+
+## 0.1.3 发布准备（2026-10-11）
+
+27 项财务规则测试重新通过，APK SHA-256 与校验文件一致。发布附件为 APK 与 .sha256；版本码 4，沿用原开发签名，实际验证与设备验证限制见 docs/releases/v0.1.3.md。

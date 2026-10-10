@@ -10,7 +10,7 @@ import android.net.Uri;
 import java.io.*;
 import org.json.JSONObject;
 
-/** Offline shell. No INTERNET permission; only packaged assets may navigate. */
+/** Offline shell. Update-only networking; only packaged assets may navigate. */
 public class MainActivity extends Activity {
     private WebView web;
     private String pendingBackup;
@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(false);
         web.addJavascriptInterface(new Storage(), "LocalDevice");
+        web.addJavascriptInterface(new Updater(this, web), "DeviceUpdater");
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return true; }
         });

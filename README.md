@@ -1,10 +1,10 @@
 # 松鼠症 · SquirrelFin
 
-安卓优先的本地财富记录工具，采用暖灰、鼠尾草绿和简约卡片界面。当前开发版 0.1.2，无登录、服务器、广告或网络权限。
+安卓优先的本地财富记录工具，采用暖灰、鼠尾草绿和简约卡片界面。当前源码版 0.1.3，无登录、服务器或广告；账本完全本地，更新检测与下载使用网络权限。
 
 ## 安装与试用
 
-当前开发版可从 [GitHub Release v0.1.2](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.2) 下载；APK 为 `dist/SquirrelFin-0.1.2-debug.apk`，附 SHA-256 校验文件。支持 Android 8.0 及以上，建议更新 Android System WebView。开发签名仅供试用，沿用原签名以支持覆盖安装。未连接真机或模拟器，因此尚未完成安卓设备运行测试。
+当前开发版可从 [GitHub Release v0.1.3](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.3) 下载；APK 为 `SquirrelFin-0.1.3-debug.apk`，附 SHA-256 校验文件。支持 Android 8.0 及以上，开发签名仅供试用，沿用原签名。安卓真机运行、断点续传和覆盖安装尚未验证。
 
 电脑预览（Node.js 18+，无第三方依赖）：
 
@@ -40,7 +40,7 @@ npm start
 
 贵重物品残值为用户估计的预计变现净额，不是平台报价。出售后的归零记录和到账流水保留用于对账，首版不支持撤销出售。
 
-安卓数据通过原子文件写入应用私有目录，浏览器预览通过 localStorage 保存。卸载或清除数据会丢失记录。请定期导出备份；备份为明文，未实现应用锁或额外数据库加密。应用不申请 INTERNET 权限；导出或导入文件的位置由系统文件选择器和用户决定。
+安卓数据通过原子文件写入应用私有目录，浏览器预览通过 localStorage 保存。卸载或清除数据会丢失记录。请定期导出备份；备份为明文，未实现应用锁或额外数据库加密。应用仅为更新检测和安装包下载申请 INTERNET 权限，账本不上传；导出或导入文件的位置由系统文件选择器和用户决定。
 
 ## 测试
 
@@ -66,3 +66,9 @@ Expand-Archive -LiteralPath .build-tools/build-tools_r35_windows.zip -Destinatio
 SDK 工具、开发签名与构建产物在 Git 忽略目录中。请保存 `.build-tools/debug.keystore`，丢失签名后无法覆盖安装已有开发版。构建脚本验证 APK v2/v3 签名，输出应用标识与 SDK 要求。
 
 主要源代码：`app/src/main/assets/`（界面与计算）、`app/src/main/java/com/squirrelfin/app/MainActivity.java`（安卓离线存储与文件备份）。
+
+## 0.1.3 应用更新
+
+设置 → 应用更新，手动读取本项目 GitHub 最新正式 Release，按数字版本判断。使用 Release APK 资产与 GitHub SHA-256 摘要；支持暂停、网络失败后继续和应用重启后续传，服务器不支持 Range 时安全重新下载。安装前核验大小、SHA-256、包名、版本与签名。系统需要允许此来源安装，返回后再次点击安装。下载仅在应用进程存活时运行，退出后保留进度，不自动安装。浏览器预览提供 Release 链接，安卓应用提供下载与安装。
+
+本地构建产物为 `dist/SquirrelFin-0.1.3-debug.apk`，发布记录见 [v0.1.3](docs/releases/v0.1.3.md)。发布需同时上传 APK 和 SHA-256 文件并沿用原签名；更新器要求 GitHub 提供资产 digest。
