@@ -1,0 +1,63 @@
+# 松鼠症 · SquirrelFin
+
+安卓优先的本地财富记录工具，采用暖灰、鼠尾草绿和简约卡片界面。首版 0.1.0，无登录、服务器、广告或网络权限。
+
+## 安装与试用
+
+从 [GitHub Release v0.1.0](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.0) 下载开发版 APK 和 SHA-256 校验文件。支持 Android 8.0 及以上，建议更新 Android System WebView。将 APK 传到手机后安装。开发签名用于首版试用，后续更新需要使用同一签名。未连接真机或模拟器，因此尚未完成安卓设备运行测试。自行构建时输出位置为 `dist/SquirrelFin-0.1.0-debug.apk`。
+
+电脑预览（Node.js 18+，无第三方依赖）：
+
+```powershell
+npm start
+```
+
+浏览器打开 http://127.0.0.1:4173 。预览与 APK 共用界面和计算模块，但各自独立保存数据。默认空账本，可选择体验明确标注的示例数据。
+
+## 已实现
+
+- 金融净资产、含实物估值净资产、负债、财富分布和待办提醒。
+- 现金、投资、贵重物品、负债登记，存放位置与手工风险标签。
+- 收入、支出、转账、投资追加与取出；整数分存储金额。
+- 资产估值更新、历史记录、收益金额、无现金流持有期收益率及 XIRR 年化。
+- 日、周、月定投计划，到期核验、实际金额、失败与跳过记录。
+- 定投确认时可选择现金来源，同时记录转出，避免财富重复增长。
+- 实物成本、净残值及出售到账记录；出售后残值归零。
+- 金额隐藏、完整 JSON 导出与恢复、数据验证与清空前确认。
+
+## 数据与计算约定
+
+初始金额是登记当天后续流水发生之前的余额；后续估值为该日日末余额，已经包含当日交易。估值后的日期流水继续调整当前余额。不能从稀疏快照还原日内交易顺序，因此收益仅计算至最后一次估值日期。
+
+投资收益 = 期末估值 − 期初估值 − 区间净投入。没有现金流时显示持有期收益率；有追加或取出时使用 XIRR。所有后续估值区间现金流须由用户确认完整，才显示收益率。新增或删除历史交易会撤销后续估值的核验状态。年化结果不是未来收益承诺；无解或发现多解时不显示。
+
+定投按自然日计算；月末日期不足时取当月最后一天，不自动顺延节假日。计划到期不代表成交，仅用户核验成交后计入完成率。当前不支持暂停、交易平台连接、份额/净值同步或自动扣款。
+
+贵重物品残值为用户估计的预计变现净额，不是平台报价。出售后的归零记录和到账流水保留用于对账，首版不支持撤销出售。
+
+安卓数据通过原子文件写入应用私有目录，浏览器预览通过 localStorage 保存。卸载或清除数据会丢失记录。请定期导出备份；备份为明文，未实现应用锁或额外数据库加密。应用不申请 INTERNET 权限；导出或导入文件的位置由系统文件选择器和用户决定。
+
+## 测试
+
+```powershell
+npm test
+```
+
+覆盖收益与本金区分、XIRR、多解处理、内部转账、估值日期边界、月末/闰年计划、执行完成率及备份关联校验。浏览器 UI 实际验证见 `docs/verification.md`。
+
+## 安卓构建
+
+可用 Android Studio 打开项目，安装 SDK 35，使用 JDK 17 与 Gradle 8.9 构建 `app`。项目没有 Gradle Wrapper，需要本机 Gradle 或 IDE 提供 Gradle。
+
+本次 APK 使用 Google 官方 SDK 平台与 build-tools 独立构建，绕过 Gradle 的运行环境依赖：
+
+```powershell
+node tools/fetch-android.cjs
+Expand-Archive -LiteralPath .build-tools/platform-35_r02.zip -DestinationPath .build-tools/platform -Force
+Expand-Archive -LiteralPath .build-tools/build-tools_r35_windows.zip -DestinationPath .build-tools/tools -Force
+.\tools\build-apk.ps1 -Jdk '你的 JDK 路径'
+```
+
+SDK 工具、开发签名与构建产物在 Git 忽略目录中。请保存 `.build-tools/debug.keystore`，丢失签名后无法覆盖安装已有开发版。构建脚本验证 APK v2/v3 签名，输出应用标识与 SDK 要求。
+
+主要源代码：`app/src/main/assets/`（界面与计算）、`app/src/main/java/com/squirrelfin/app/MainActivity.java`（安卓离线存储与文件备份）。
