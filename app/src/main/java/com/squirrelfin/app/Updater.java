@@ -46,8 +46,9 @@ public class Updater {
         if(!"https".equals(u.getProtocol()) || !(host.equals("api.github.com")||host.equals("github.com")||host.equals("release-assets.githubusercontent.com")||host.equals("objects.githubusercontent.com")))throw new IOException("下载地址不受支持");
         HttpURLConnection c=(HttpURLConnection)u.openConnection(); c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setInstanceFollowRedirects(false);c.setRequestProperty("User-Agent","SquirrelFin/"+version);c.setRequestProperty("Accept-Encoding","identity");return c;
     }
-    private HttpURLConnection request(String url,long offset) throws Exception {
-        for(int i=0;i<6;i++) { HttpURLConnection c=connect(url);if(offset>0)c.setRequestProperty("Range","bytes="+offset+"-");int code=c.getResponseCode();
+    private HttpURLConnection request(String url,long offset) throws Exception { return request(url,offset,"GET"); }
+    private HttpURLConnection request(String url,long offset,String method) throws Exception {
+        for(int i=0;i<6;i++) { HttpURLConnection c=connect(url);c.setRequestMethod(method);if(offset>0)c.setRequestProperty("Range","bytes="+offset+"-");int code=c.getResponseCode();
             if(code>=300&&code<400){String location=c.getHeaderField("Location");url=new URL(new URL(url),location).toString();c.disconnect();continue;}return c;
         }throw new IOException("重定向过多");
     }
@@ -55,10 +56,38 @@ public class Updater {
         JSONObject s=new JSONObject();try{s.put("current",version).put("phase",phase).put("message",message).put("downloaded",downloaded).put("total",total);if(release!=null)s.put("release",release);}catch(Exception ignored){}return s.toString();
     }
     private synchronized void emit(String p,String m) { phase=p;message=m;String json=status();activity.runOnUiThread(()->web.evaluateJavascript("App.updateStatus("+json+")",null)); }
+    static String assetName(String html,String tag) throws IOException {
+        String prefix="/tyrantqiao/SquirrelFin/releases/download/"+tag+"/";
+        java.util.regex.Matcher m=java.util.regex.Pattern.compile("href=\""+java.util.regex.Pattern.quote(prefix)+"(SquirrelFin-"+java.util.regex.Pattern.quote(tag.replaceFirst("^v",""))+"(?:-debug)?\\.apk)\"").matcher(html);
+        java.util.Set<String> names=new java.util.HashSet<>();while(m.find())names.add(m.group(1));
+        if(names.size()!=1)throw new IOException("Release 安装包缺失或不唯一");return names.iterator().next();
+    }
+    static String checksum(String text,String name) throws IOException {
+        String[] lines=text.trim().split("\\r?\\n");
+        if(lines.length!=1)throw new IOException("SHA-256 文件格式不受支持");
+        java.util.regex.Matcher m=java.util.regex.Pattern.compile("([0-9a-fA-F]{64})[ \\t]+\\*?"+java.util.regex.Pattern.quote(name)).matcher(lines[0]);
+        if(!m.matches())throw new IOException("SHA-256 文件与安装包不匹配");return m.group(1);
+    }
+    private String fetchText(String url,int limit) throws Exception {
+        HttpURLConnection c=request(url,0);try{if(c.getResponseCode()!=200)throw new IOException("无法获取 Release 文件（HTTP "+c.getResponseCode()+"）");return new String(read(c.getInputStream(),limit),"UTF-8");}finally{c.disconnect();}
+    }
+    private JSONObject websiteRelease() throws Exception {
+        HttpURLConnection c=request(REPO+"latest",0);String tag;
+        try{String page=c.getURL().toString();if(c.getResponseCode()!=200||!page.startsWith(REPO+"tag/"))throw new IOException("无法获取最新正式 Release");tag=page.substring((REPO+"tag/").length());if(!tag.matches("v?\\d+\\.\\d+\\.\\d+"))throw new IOException("Release 版本格式不受支持");}finally{c.disconnect();}
+        JSONObject data=new JSONObject().put("tag_name",tag).put("assets",new JSONArray());
+        if(compare(tag,version)<=0)return data;
+        String name=assetName(fetchText(REPO+"expanded_assets/"+tag,1000000),tag),url=REPO+"download/"+tag+"/"+name;
+        String digest=checksum(fetchText(url+".sha256",4096),name);long size;
+        c=request(url,0,"HEAD");try{if(c.getResponseCode()!=200)throw new IOException("无法获取安装包大小");size=c.getContentLengthLong();}finally{c.disconnect();}
+        data.getJSONArray("assets").put(new JSONObject().put("name",name).put("browser_download_url",url).put("digest","sha256:"+digest).put("size",size));
+        return data.put("body","通过 GitHub Release 备用检测获取；完整更新说明请查看 GitHub Release。");
+    }
     @JavascriptInterface public synchronized void check() {
         if(busy)return;busy=true;emit("checking","正在检测 GitHub Release…");worker.execute(()->{
             try {HttpURLConnection c=request("https://api.github.com/repos/tyrantqiao/SquirrelFin/releases/latest",0);JSONObject data;
-                try{if(c.getResponseCode()!=200)throw new IOException(c.getResponseCode()==403?"GitHub 请求受限，请稍后重试":"无法获取 Release（HTTP "+c.getResponseCode()+"）");data=new JSONObject(new String(read(c.getInputStream(),1000000),"UTF-8"));}finally{c.disconnect();}
+                int code;try{code=c.getResponseCode();if(code==200)data=new JSONObject(new String(read(c.getInputStream(),1000000),"UTF-8"));else data=null;}finally{c.disconnect();}
+                if(code==403||code==429){emit("checking","GitHub API 请求受限，正在通过 Release 备用检测…");data=websiteRelease();}
+                else if(code!=200)throw new IOException("无法获取 Release（HTTP "+code+"）");
                 String tag=data.getString("tag_name");if(data.optBoolean("draft")||data.optBoolean("prerelease")||!tag.matches("v?\\d+\\.\\d+\\.\\d+"))throw new IOException("Release 版本格式不受支持");
                 if(compare(tag,version)<=0){emit("latest","当前已是最新版本");return;}
                 JSONArray assets=data.getJSONArray("assets");JSONObject candidate=null;
