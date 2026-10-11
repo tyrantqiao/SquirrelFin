@@ -71,3 +71,7 @@ Google 官方 Android SDK 35 平台和 build-tools 35.0.0 编译。安装包通�
 ## 0.1.3 发布准备（2026-10-11）
 
 27 项财务规则测试重新通过，APK SHA-256 与校验文件一致。发布附件为 APK 与 .sha256；版本码 4，沿用原开发签名，实际验证与设备验证限制见 docs/releases/v0.1.3.md。
+
+## 0.1.4 Release 构建（2026-10-11）
+
+27 项测试与 JS 语法检查通过；独立构建目录排除旧测试类，Java 使用 -g:none。APK 包内 debuggable=false、testOnly=false，版本码 5，v2/v3 签名验证通过，证书与 0.1.3 相同，六个 assets 与源码逐项一致。APK 与 SHA-256 文件位于 dist，不进入源码历史。保留开发签名，仍为试用包；未验证安卓真机覆盖安装、实际断网/重启续传和系统安装权限。发布说明见 docs/releases/v0.1.4.md。
