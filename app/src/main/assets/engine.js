@@ -18,13 +18,18 @@
     return {total:expenses.reduce((n,t)=>n+t.amount,0),categories,natures};
   }
   function suggestExpense(source,note) {
-    const aliases={玩:'娱乐',礼物:'人情',日常:'其他',吃:'餐饮',餐饮:'餐饮',交通:'交通',购物:'购物',居住:'居住',娱乐:'娱乐',人情:'人情',医疗:'医疗',教育:'教育',保险:'保险',水电通讯:'水电通讯'};
+    const aliases={吃饭:'餐饮',出行:'交通',学习:'教育',玩:'娱乐',礼物:'人情',日常:'其他',吃:'餐饮',餐饮:'餐饮',交通:'交通',购物:'购物',居住:'居住',娱乐:'娱乐',人情:'人情',医疗:'医疗',教育:'教育',保险:'保险',水电通讯:'水电通讯'};
     let category=aliases[source]||'其他',nature='variable';
-    if(source==='日常'||source==='居住'||source==='其他') {
+    if(!aliases[source]||['日常','居住','其他','投资'].includes(source)) {
       if(/房租|租金|月租/.test(note)) {category='居住';nature='fixed';}
       else if(/骑自行车|打车|地铁|公交/.test(note))category='交通';
       else if(/早餐|午餐|晚餐|吃饭/.test(note))category='餐饮';
       else if(/水费|电费|话费|网费/.test(note))category='水电通讯';
+      else if(/ChatGPT|GPT|服务器|域名|云服务/i.test(note)) {category='教育';nature='fixed';}
+      else if(/衣服|鞋|裤|沐浴露|牙线|手机|耳机|电脑|买东西/.test(note))category='购物';
+      else if(/医院|看病|药费|挂号/.test(note))category='医疗';
+      else if(/机票|动车|高铁|改签|火车/.test(note))category='交通';
+      else if(/电影|冲浪|游戏/.test(note))category='娱乐';
       else if(/会员|订阅/.test(note)) {category='娱乐';nature='fixed';}
     }
     if(source==='礼物')nature='occasional';
