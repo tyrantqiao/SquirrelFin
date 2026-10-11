@@ -60,9 +60,9 @@
     const existing=new Set(state.transactions.filter(t=>['income','expense'].includes(t.type)&&!t.linked).map(ledgerKey)),seen=new Set();
     return rows.map(row=>{
       const a=state.assets.find(a=>a.id===row.asset);let error='';
-      if(!a||a.kind!=='cash')error='请选择现金账户';
+      if(row.asset!==null&&(!a||a.kind!=='cash'))error='请选择现金账户';
       else if(!validDate(row.date)||row.date>at)error='日期无效或晚于今天';
-      else if(row.date<a.snapshots.map(v=>v.date).sort()[0])error='早于该账户初始盘点，请更换账户或登记历史账户';
+      else if(a&&row.date<a.snapshots.map(v=>v.date).sort()[0])error='早于该账户初始盘点，请更换账户或登记历史账户';
       else if(!['income','expense'].includes(row.type)||!Number.isSafeInteger(row.amount)||row.amount<=0||row.amount>1e14||typeof row.note!=='string'||!row.note.trim()||row.note.length>100)error='收支或金额、备注无效';
       else if(row.type==='expense'&&(!expenseCategories.includes(row.category)||!Object.hasOwn(expenseNatures,row.nature)))error='请核对支出分类';
       const key=!error?ledgerKey(row):null,duplicate=!!key&&(existing.has(key)||seen.has(key));
@@ -78,7 +78,7 @@
       const t={id:makeId(),type:r.type,asset:r.asset,to:null,date:r.date,amount:r.amount,note:r.note,sourceCategory:r.sourceCategory};
       if(r.type==='expense'){t.category=r.category;t.nature=r.nature;}
       next.transactions.push(t);
-      next.assets.find(a=>a.id===t.asset).snapshots.filter(v=>v.date>=t.date).forEach(v=>v.confirmed=false);
+      next.assets.find(a=>a.id===t.asset)?.snapshots.filter(v=>v.date>=t.date).forEach(v=>v.confirmed=false);
     }
     return validate(next);
   }
@@ -162,9 +162,9 @@
     }
     const tids=new Set();
     for(const t of s.transactions) {
-      if(typeof t.id!=='string'||tids.has(t.id)||!ids.has(t.asset)||!validDate(t.date)||!money(t.amount)||t.amount<=0||typeof t.note!=='string'||!['income','expense','transfer','deposit','withdraw'].includes(t.type)) fail();
+      if(typeof t.id!=='string'||tids.has(t.id)||!(ids.has(t.asset)||t.asset===null&&['income','expense'].includes(t.type)&&!t.linked&&!t.to)||!validDate(t.date)||!money(t.amount)||t.amount<=0||typeof t.note!=='string'||!['income','expense','transfer','deposit','withdraw'].includes(t.type)) fail();
       const a=s.assets.find(a=>a.id===t.asset);
-      if(['item','debt'].includes(a.kind)||t.date<a.snapshots.map(v=>v.date).sort()[0]) fail();
+      if(a&&(['item','debt'].includes(a.kind)||t.date<a.snapshots.map(v=>v.date).sort()[0])) fail();
       if(t.category!==undefined&&(t.type!=='expense'||t.linked||!expenseCategories.includes(t.category))) fail();
       if(t.nature!==undefined&&(t.type!=='expense'||t.linked||!Object.hasOwn(expenseNatures,t.nature))) fail();
       if(t.sourceCategory!==undefined&&(!['income','expense'].includes(t.type)||t.linked||typeof t.sourceCategory!=='string'||!t.sourceCategory.trim()||t.sourceCategory.length>40)) fail();
@@ -175,7 +175,7 @@
       if(!Array.isArray(s.expenseTemplates)||s.expenseTemplates.length>2000) fail();
       const templateIds=new Set();
       for(const t of s.expenseTemplates) {
-        if(typeof t.id!=='string'||!t.id||templateIds.has(t.id)||typeof t.name!=='string'||!t.name.trim()||t.name.length>100||!money(t.amount)||t.amount<=0||!expenseCategories.includes(t.category)||!Object.hasOwn(expenseNatures,t.nature)||!['none','monthly','yearly'].includes(t.frequency)||!ids.has(t.asset)||s.assets.find(a=>a.id===t.asset).kind!=='cash') fail();
+        if(typeof t.id!=='string'||!t.id||templateIds.has(t.id)||typeof t.name!=='string'||!t.name.trim()||t.name.length>100||!money(t.amount)||t.amount<=0||!expenseCategories.includes(t.category)||!Object.hasOwn(expenseNatures,t.nature)||!['none','monthly','yearly'].includes(t.frequency)||!(t.asset===null||ids.has(t.asset)&&s.assets.find(a=>a.id===t.asset).kind==='cash')) fail();
         templateIds.add(t.id);
       }
     }
