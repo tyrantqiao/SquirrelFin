@@ -85,4 +85,4 @@ Google 官方 Android SDK 35 平台和 build-tools 35.0.0 编译。安装包通�
 - 未验证：安卓真机/模拟器运行、系统软键盘及覆盖安装。浏览器验证不能替代安卓运行验证。
 
 ## v0.1.5 发布准备（2026-10-11）
-版本码 6，30 项测试通过。重建 APK，v2/v3 签名通过，六个 assets 与最终源码 SHA-256 一致。校验文件与发布说明已生成；当前 GitHub CLI 登录凭据失效，尚未上传 Release。安卓验证限制见 docs/releases/v0.1.5.md。
+版本码 6，30 项测试通过。重建 APK，v2/v3 签名通过，六个 assets 与最终源码 SHA-256 一致。校验文件与发布说明已生成；已发布 GitHub Release v0.1.5，APK 与校验文件均已上传，GitHub APK digest 与本地 SHA-256 一致。安卓验证限制见 docs/releases/v0.1.5.md。
