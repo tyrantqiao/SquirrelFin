@@ -8,7 +8,7 @@
     if(!Number.isSafeInteger(n)||Math.abs(n)>1e14) throw Error('金额超出范围');
     return n;
   }
-  const expenseCategories=['餐饮','居住','交通','购物','水电通讯','医疗','教育','娱乐','人情','保险','其他'];
+  const expenseCategories=['餐饮','居住','交通','购物','水电通讯','医疗','教育','健身','娱乐','人情','保险','其他'];
   const expenseNatures={fixed:'固定支出',variable:'日常可变',occasional:'偶发支出'};
   function blank() { return {version:1,assets:[],transactions:[],plans:[],executions:[],expenseTemplates:[]}; }
   function expenseSummary(state,month) {
@@ -18,7 +18,7 @@
     return {total:expenses.reduce((n,t)=>n+t.amount,0),categories,natures};
   }
   function suggestExpense(source,note) {
-    const aliases={吃饭:'餐饮',出行:'交通',学习:'教育',玩:'娱乐',礼物:'人情',日常:'其他',吃:'餐饮',餐饮:'餐饮',交通:'交通',购物:'购物',居住:'居住',娱乐:'娱乐',人情:'人情',医疗:'医疗',教育:'教育',保险:'保险',水电通讯:'水电通讯'};
+    const aliases={吃饭:'餐饮',出行:'交通',学习:'教育',玩:'娱乐',礼物:'人情',日常:'其他',吃:'餐饮',餐饮:'餐饮',交通:'交通',购物:'购物',居住:'居住',娱乐:'娱乐',人情:'人情',医疗:'医疗',教育:'教育',健身:'健身',保险:'保险',水电通讯:'水电通讯'};
     let category=aliases[source]||'其他',nature='variable';
     if(!aliases[source]||['日常','居住','其他','投资'].includes(source)) {
       if(/房租|租金|月租/.test(note)) {category='居住';nature='fixed';}
@@ -118,6 +118,13 @@
     }
     return roots.length===1 ? Math.expm1(roots[0]):null;
   }
+  function snapshotReview(state,a,date,value) {
+    const previous=[...a.snapshots].filter(v=>v.date<date).sort((x,y)=>x.date.localeCompare(y.date)).at(-1);
+    if(!previous)return {hasFlows:false,unusual:false};
+    const ts=state.transactions.filter(t=>(t.date>previous.date||(previous.opening&&t.date===previous.date))&&t.date<=date&&flow(t,a.id)!==0);
+    const expected=previous.value+ts.reduce((n,t)=>n+flow(t,a.id),0),difference=value-expected;
+    return {hasFlows:ts.length>0,expected,difference,unusual:expected<=0?difference!==0:Math.abs(difference)/expected>=0.2};
+  }
   function performance(state,a) {
     if(a.kind!=='investment') return null;
     const snaps=[...a.snapshots].sort((x,y)=>x.date.localeCompare(y.date));
@@ -205,6 +212,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
