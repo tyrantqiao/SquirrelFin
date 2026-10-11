@@ -2,6 +2,11 @@ package com.squirrelfin.app;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Build;
+import android.graphics.Insets;
+import android.view.WindowInsets;
+import android.view.DisplayCutout;
+import android.widget.FrameLayout;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.JavascriptInterface;
@@ -18,10 +23,31 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(0xfff6f5f1);
         getWindow().setNavigationBarColor(0xfff6f5f1);
+        if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
         web = new WebView(this);
-        web.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
-                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+        // Resize the WebView's actual bounds, including fixed HTML navigation and dialogs.
+        FrameLayout content = new FrameLayout(this);
+        content.setBackgroundColor(0xfff6f5f1);
+        content.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        content.setOnApplyWindowInsetsListener((view, insets) -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                Insets safe = insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            } else {
+                int left = insets.getSystemWindowInsetLeft(), top = insets.getSystemWindowInsetTop();
+                int right = insets.getSystemWindowInsetRight(), bottom = insets.getSystemWindowInsetBottom();
+                if (Build.VERSION.SDK_INT >= 28) {
+                    DisplayCutout cutout = insets.getDisplayCutout();
+                    if (cutout != null) {
+                        left = Math.max(left, cutout.getSafeInsetLeft());
+                        top = Math.max(top, cutout.getSafeInsetTop());
+                        right = Math.max(right, cutout.getSafeInsetRight());
+                        bottom = Math.max(bottom, cutout.getSafeInsetBottom());
+                    }
+                }
+                view.setPadding(left, top, right, bottom);
+            }
             return insets;
         });
         web.getSettings().setJavaScriptEnabled(true);
@@ -33,8 +59,8 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return true; }
         });
-        setContentView(web);
-        web.requestApplyInsets();
+        setContentView(content);
+        content.requestApplyInsets();
         web.loadUrl("file:///android_asset/index.html");
     }
     public class Storage {

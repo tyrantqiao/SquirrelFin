@@ -65,7 +65,7 @@ dialog.light-entry{height:min(760px,calc(var(--view-height,100dvh) - 24px))}
 .number-pad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px}
 .number-key{min-height:45px;border-radius:11px;background:#f0f1e9;color:#34452d;font-size:23px;font-variant-numeric:tabular-nums}
 .number-key:active{background:#dce5cf;transform:scale(.98)}
-.light-entry .form-content:has(#tx-notes:not([hidden])) .number-pad{margin-top:14px}
+.light-entry .form-content:has(#tx-settings-page:not([hidden])) .number-pad{margin-top:14px}
 .toast-action{background:#526545;color:#fff;border-radius:7px;padding:7px 12px;margin-left:8px;min-height:36px}
 #toast:has(.toast-action){pointer-events:auto}
 .toolbar-actions{display:flex;gap:8px;flex-shrink:0}
@@ -120,3 +120,38 @@ progress {width:100%;height:12px;accent-color:#748574} .release-notes {white-spa
 .entry-choices{display:grid;gap:8px;margin-top:18px}.entry-choices button{min-height:48px}.entry-choices p{margin:0 0 12px}
 
 #privacy{display:grid;place-items:center;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:22px;line-height:1}#privacy[aria-pressed="true"]{background:#e6eadd;border-color:#bcc8b0;color:#4d6140}.allocation[hidden]{display:none}
+
+/* Browser safe areas; Android supplies an already inset WebView viewport. */
+:root{--safe-top:env(safe-area-inset-top,0px);--safe-right:env(safe-area-inset-right,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--safe-left:env(safe-area-inset-left,0px)}
+.icon-button{width:44px;height:44px;flex-shrink:0}
+.modal-head{gap:12px;min-height:44px}
+.modal-head h2{min-width:0;overflow-wrap:anywhere}
+.header-actions{flex-shrink:0}
+@media(max-width:760px){
+ main{padding:calc(24px + var(--safe-top)) calc(16px + var(--safe-right)) calc(100px + var(--safe-bottom)) calc(16px + var(--safe-left))}
+ header{gap:12px;margin-bottom:20px}
+ .eyebrow{font-size:10px;letter-spacing:.5px}
+ .mobile-nav{padding:8px calc(10px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(10px + var(--safe-left))}
+ .mobile-nav .nav-link{min-height:52px;flex:1}
+ dialog{padding:calc(16px + var(--safe-top)) calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left))}
+ .modal-head{margin-bottom:16px}
+ .form-content{scroll-padding-block:16px}
+ .submit-area{padding-top:12px}
+ #toast{bottom:calc(92px + var(--safe-bottom))}
+}
+@media(min-width:761px){
+ .layout{padding:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left)}
+ dialog{max-height:calc(var(--view-height,100dvh) - var(--safe-top) - var(--safe-bottom) - 24px)}
+ dialog.has-form,dialog.light-entry{height:min(650px,calc(var(--view-height,100dvh) - var(--safe-top) - var(--safe-bottom) - 24px))}
+}
+@media(max-width:760px) and (max-height:740px){
+ dialog.light-entry{padding-top:calc(12px + var(--safe-top));padding-bottom:calc(12px + var(--safe-bottom))}
+ .light-entry .form-content{padding-bottom:0}
+ .light-entry .modal-head{margin-bottom:8px}
+ .light-entry .money-entry{padding:0 4px;margin:2px 0 4px}
+ .light-entry .money-entry input{min-height:48px;font-size:36px}
+ .light-entry .category-grid{margin:2px 0}
+ .light-entry .tx-settings-link{margin:4px 0}
+ .light-entry .number-pad{margin-top:2px;gap:4px}
+ .light-entry .number-key{min-height:44px}
+}
