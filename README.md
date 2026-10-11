@@ -1,10 +1,10 @@
 # 松鼠症 · SquirrelFin
 
-安卓优先的本地财富记录工具，采用暖灰、鼠尾草绿和简约卡片界面。当前源码版 0.1.8，无登录、服务器或广告；账本完全本地，更新检测与下载使用网络权限。
+安卓优先的本地财富记录工具，采用暖灰、鼠尾草绿和简约卡片界面。当前源码版 0.1.9，无登录、服务器或广告；账本完全本地，更新检测与下载使用网络权限。
 
 ## 安装与试用
 
-当前开发版可从 [GitHub Release v0.1.8](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.8) 下载；APK 为 `SquirrelFin-0.1.8.apk`，附 SHA-256 校验文件。支持 Android 8.0 及以上，开发签名仅供试用，沿用原签名。安卓真机运行、断点续传和覆盖安装尚未验证。
+当前开发版可从 [GitHub Release v0.1.9](https://github.com/tyrantqiao/SquirrelFin/releases/tag/v0.1.9) 下载；APK 为 `SquirrelFin-0.1.9.apk`，附 SHA-256 校验文件。支持 Android 8.0 及以上，开发签名仅供试用，沿用原签名。安卓真机运行、断点续传和覆盖安装尚未验证。
 
 电脑预览（Node.js 18+，无第三方依赖）：
 
@@ -71,6 +71,6 @@ SDK 工具、开发签名与构建产物在 Git 忽略目录中。请保存 `.bu
 
 设置 → 应用更新，手动读取本项目 GitHub 最新正式 Release，按数字版本判断。API 返回 403/429 时自动转用官方 Release 网页与同名 .sha256 校验文件。使用 Release APK 资产与 SHA-256 摘要；支持暂停、网络失败后继续和应用重启后续传，服务器不支持 Range 时安全重新下载。安装前核验大小、SHA-256、包名、版本与签名。系统需要允许此来源安装，返回后再次点击安装。下载仅在应用进程存活时运行，退出后保留进度，不自动安装。浏览器预览提供 Release 链接，安卓应用提供下载与安装。
 
-本地构建产物为 `dist/SquirrelFin-0.1.8.apk`，修复说明见 [v0.1.8](docs/releases/v0.1.8.md)。发布需同时上传 APK 和 SHA-256 文件并沿用原签名；API 检测要求 GitHub 提供资产 digest，网页备用检测要求同名 .apk.sha256 文件。
+本地构建产物为 `dist/SquirrelFin-0.1.9.apk`，修复说明见 [v0.1.9](docs/releases/v0.1.9.md)。发布需同时上传 APK 和 SHA-256 文件并沿用原签名；API 检测要求 GitHub 提供资产 digest，网页备用检测要求同名 .apk.sha256 文件。
 
 0.1.6 支持无需账户直接记账，取消抽屉与折叠交互；为非调试 Release 构建，明确关闭 debuggable/testOnly，沿用开发签名以保留覆盖安装兼容性，仍为试用性质。
