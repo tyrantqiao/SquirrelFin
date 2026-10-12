@@ -17,6 +17,60 @@
     for(const t of expenses) {const category=t.category||'未分类';categories[category]=(categories[category]||0)+t.amount;natures[t.nature||'unclassified']+=t.amount;}
     return {total:expenses.reduce((n,t)=>n+t.amount,0),categories,natures};
   }
+  function ledgerReport(state,period,anchor,today) {
+    if(!['week','month','year'].includes(period)||!validDate(anchor)||!validDate(today)||anchor>today) throw Error('统计区间无效');
+    const iso=n=>new Date(n*86400000).toISOString().slice(0,10);
+    const bounds=date=>{
+      const y=Number(date.slice(0,4)),m=Number(date.slice(5,7));
+      if(period==='week') {const start=day(date)-(new Date(day(date)*86400000).getUTCDay()+6)%7;return [iso(start),iso(start+6)];}
+      const start=period==='year'?`${date.slice(0,4)}-01-01`:date.slice(0,7)+'-01';
+      const next=period==='year'?Date.UTC(y+1,0,1):Date.UTC(y,m,1);
+      return [start,iso(next/86400000-1)];
+    };
+    const [start,periodEnd]=bounds(anchor),end=periodEnd<today?periodEnd:today,days=day(end)-day(start)+1;
+    const [previousStart,previousFullEnd]=bounds(iso(day(start)-1));
+    const previousEnd=iso(Math.min(day(previousFullEnd),day(previousStart)+days-1));
+    const summarize=(from,to)=>{
+      const rows=state.transactions.filter(t=>t.date>=from&&t.date<=to&&!t.linked&&['income','expense'].includes(t.type));
+      const categories={},natures={fixed:0,variable:0,occasional:0,unclassified:0};let income=0,expense=0;
+      for(const t of rows) {if(t.type==='income')income+=t.amount;else{expense+=t.amount;const c=t.category||'未分类';categories[c]=(categories[c]||0)+t.amount;natures[t.nature||'unclassified']+=t.amount;}}
+      return {rows,income,expense,net:income-expense,categories,natures};
+    };
+    const current=summarize(start,end),previous=summarize(previousStart,previousEnd),buckets=[];
+    for(let n=day(start);n<=day(end);) {
+      const from=iso(n),to=period==='year'?iso(Math.min(day(boundsMonthEnd(from)),day(end))):from;
+      const s=summarize(from,to);buckets.push({date:from,label:period==='year'?Number(from.slice(5,7))+'月':from.slice(5),income:s.income,expense:s.expense});n=day(to)+1;
+    }
+    const expenses=current.rows.filter(t=>t.type==='expense'),incomes=current.rows.filter(t=>t.type==='income');
+    const incomeSources=Object.create(null),accounts=new Map(),daily=new Map();
+    const weekdays=Array.from({length:7},(_,i)=>({label:['周一','周二','周三','周四','周五','周六','周日'][i],days:0,count:0,expense:0}));
+    for(let n=day(start);n<=day(end);n++)weekdays[(new Date(n*86400000).getUTCDay()+6)%7].days++;
+    for(const t of current.rows){
+      const key=t.asset||null;
+      if(!accounts.has(key))accounts.set(key,{asset:key,income:0,expense:0,count:0});
+      const account=accounts.get(key);account[t.type]+=t.amount;account.count++;
+      if(t.type==='income'){const source=t.sourceCategory||t.category||'未标注来源';incomeSources[source]=(incomeSources[source]||0)+t.amount;}
+      else{const w=weekdays[(new Date(day(t.date)*86400000).getUTCDay()+6)%7];w.expense+=t.amount;w.count++;daily.set(t.date,(daily.get(t.date)||0)+t.amount);}
+    }
+    weekdays.forEach(w=>w.average=w.days?Math.round(w.expense/w.days):null);
+    const rhythmGroup=rows=>{const days=rows.reduce((s,w)=>s+w.days,0),expense=rows.reduce((s,w)=>s+w.expense,0);return {days,expense,average:days?Math.round(expense/days):null};};
+    const sortedAmounts=expenses.map(t=>t.amount).sort((a,b)=>a-b),mid=Math.floor(sortedAmounts.length/2);
+    const categoryChanges=[...new Set([...Object.keys(current.categories),...Object.keys(previous.categories)])].map(category=>({category,current:current.categories[category]||0,previous:previous.categories[category]||0,delta:(current.categories[category]||0)-(previous.categories[category]||0),count:expenses.filter(t=>(t.category||'未分类')===category).length})).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||b.current-a.current||a.category.localeCompare(b.category));
+    const peakDay=[...daily].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0];
+    const topExpenses=[...expenses].sort((a,b)=>b.amount-a.amount||b.date.localeCompare(a.date)).slice(0,5);
+    return {...current,start,end,periodEnd,days,previous:{...previous,start:previousStart,end:previousEnd},buckets,
+      incomeSources,incomeCount:incomes.length,categoryChanges,weekdays,workdays:rhythmGroup(weekdays.slice(0,5)),weekend:rhythmGroup(weekdays.slice(5)),
+      accounts:[...accounts.values()].map(a=>({...a,net:a.income-a.expense})).sort((a,b)=>b.expense-a.expense||b.income-a.income),
+      medianExpense:sortedAmounts.length?(sortedAmounts.length%2?sortedAmounts[mid]:Math.round((sortedAmounts[mid-1]+sortedAmounts[mid])/2)):null,
+      peakDay:peakDay?{date:peakDay[0],expense:peakDay[1]}:null,
+      topExpenseShare:current.expense?topExpenses.reduce((s,t)=>s+t.amount,0)/current.expense:null,
+      noExpenseDays:days-daily.size,
+      count:current.rows.length,expenseCount:expenses.length,activeDays:new Set(expenses.map(t=>t.date)).size,
+      dailyExpense:Math.round(current.expense/days),averageExpense:expenses.length?Math.round(current.expense/expenses.length):null,
+      netRatio:current.income?current.net/current.income:null,
+      topExpenses};
+  }
+  function boundsMonthEnd(date) {return new Date(Date.UTC(Number(date.slice(0,4)),Number(date.slice(5,7)),0)).toISOString().slice(0,10);}
   function suggestExpense(source,note) {
     const aliases={吃饭:'餐饮',出行:'交通',学习:'教育',玩:'娱乐',礼物:'人情',日常:'其他',吃:'餐饮',餐饮:'餐饮',交通:'交通',购物:'购物',居住:'居住',娱乐:'娱乐',人情:'人情',医疗:'医疗',教育:'教育',健身:'健身',保险:'保险',水电通讯:'水电通讯'};
     let category=aliases[source]||'其他',nature='variable';
@@ -212,6 +266,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
