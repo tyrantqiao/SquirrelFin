@@ -25,7 +25,7 @@ input,select{min-height:44px;font-size:16px;padding:10px 11px}
 .inline-help p{font-size:13px;line-height:1.7;color:#76806c}
 .check-label{font-size:13px;color:#626e59;margin:12px 0}
 .check-label input{min-height:20px;width:20px;height:20px}
-.fold-card,.recent-assets,.compact-card{margin-top:16px}
+.fold-card,.compact-card{margin-top:16px}
 .fold-card{padding-top:8px;padding-bottom:8px}
 .fold-card .wealth-tips{padding:0;margin-top:20px;border:0}
 .compact-card{padding:12px 18px}
@@ -168,4 +168,28 @@ progress {width:100%;height:12px;accent-color:#748574} .release-notes {white-spa
 .light-entry .category-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .light-entry .category-choice{min-height:55px}
 .analysis-tabs{margin:18px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.analysis-tabs .tab{min-height:44px;padding:10px 6px}.report-extra{margin:18px 0}.analysis-row{display:flex;justify-content:space-between;align-items:center;gap:16px;text-align:left;width:100%;min-height:64px;padding:14px 0;border:0;border-bottom:1px solid #e7e8df;border-radius:0;background:transparent;color:inherit}.analysis-row>span{min-width:0;overflow-wrap:anywhere}.analysis-row strong{font-size:14px;font-weight:500}.analysis-row small{display:block;margin-top:5px;color:#737e69;font-size:12px;line-height:1.6}.analysis-value{text-align:right;font-variant-numeric:tabular-nums}.analysis-row:focus-visible{outline:2px solid #697f62;outline-offset:2px}.analysis-highlights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.analysis-highlights span{display:block;color:#737e69;font-size:12px}.analysis-highlights strong{display:block;font-size:16px;margin-top:8px;font-weight:500;overflow-wrap:anywhere}@media(max-width:760px){.analysis-highlights{grid-template-columns:1fr;gap:12px}.analysis-highlights>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.analysis-highlights strong{margin:0;text-align:right}.analysis-row{gap:12px}.analysis-row>span{flex:1}.analysis-tabs .tab{font-size:13px}}
-.today-ledger{margin-top:16px}.today-ledger .section-head{margin-bottom:14px}.today-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.today-metrics span{display:block;color:#75806e;font-size:12px}.today-metrics strong{display:block;font-size:22px;font-weight:600;line-height:1.5;margin-top:6px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.today-metrics .expense strong{color:#9e7059}.today-metrics .income strong{color:#657e58}.today-ledger .disclosure{margin:12px 0 0}@media(max-width:760px){.today-ledger{padding:14px 16px}.today-ledger .section-head{margin-bottom:8px}.today-metrics{gap:8px}.today-metrics strong{font-size:17px}.today-ledger .disclosure{font-size:11px;line-height:1.6}.today-ledger .section-head .text-button{padding:6px 8px}}
+.today-ledger{margin-top:20px;padding-top:16px;border-top:1px solid #d5ddca}.today-ledger .section-head{margin-bottom:14px}.today-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.today-metrics span{display:block;color:#75806e;font-size:12px}.today-metrics strong{display:block;font-size:22px;font-weight:600;line-height:1.5;margin-top:6px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.today-metrics .expense strong{color:#9e7059}.today-metrics .income strong{color:#657e58}.today-ledger .disclosure{margin:12px 0 0}@media(max-width:760px){.today-ledger{margin-top:16px;padding-top:12px}.today-ledger .section-head{margin-bottom:8px}.today-metrics{gap:8px}.today-metrics strong{font-size:17px}.today-ledger .disclosure{font-size:11px;line-height:1.6}.today-ledger .section-head .text-button{padding:6px 8px}}
+
+.hero-bottom>div{min-width:0}.hero-bottom strong{overflow-wrap:anywhere}.today-ledger .text-button{min-height:44px}.today-ledger .disclosure{color:#6f7966}
+
+/* Group net wealth, composition and daily cash flow in one overview card. */
+.overview-summary .hero-top{align-items:center}.overview-entry{min-height:48px;flex-shrink:0}
+.overview-summary .hero-bottom{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.overview-groups{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px;padding-top:16px;border-top:1px solid #d5ddca}
+.overview-groups>section{min-width:0}.overview-groups .section-head{min-height:44px;margin-bottom:8px}
+.overview-groups .today-ledger{margin:0;padding:0;border:0}.overview-distribution .allocation{height:8px;margin:0 0 12px;background:#d5ddca}
+.distribution-caption{font-size:11px;color:#6f7966}.distribution-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.distribution-label{display:flex;align-items:center;gap:6px;color:#75806e;font-size:12px}.distribution-label .dot{flex-shrink:0}
+.distribution-metrics strong{display:block;margin-top:6px;font-size:22px;font-weight:600;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.distribution-metrics small{display:block;margin-top:4px;font-size:12px;color:#6f7966;font-variant-numeric:tabular-nums}
+.overview-notes{border-top:1px solid #d5ddca;margin-top:16px;padding-top:4px}.overview-notes>summary{min-height:44px;cursor:pointer;color:#66735b;font-size:12px;align-content:center}
+.overview-notes .disclosure{color:#6f7966}.overview-notes .wealth-tips{margin:16px 0 0;padding:0;border:0;background:transparent}.overview-notes .wealth-tips .section-head{margin-bottom:8px}
+@media(max-width:760px){
+ .overview-summary{padding:16px 20px}.overview-summary .hero-amount{margin:4px 0 8px}.overview-summary .hero-bottom{padding-top:8px}.overview-entry{padding:12px 14px}
+ .overview-groups{grid-template-columns:1fr;gap:8px;margin-top:8px;padding-top:8px}
+ .overview-groups .today-ledger{border-top:1px solid #d5ddca;padding-top:4px}
+ .overview-groups .section-head{margin-bottom:4px}.distribution-metrics{gap:8px}.distribution-metrics strong{font-size:17px;line-height:1.35}.distribution-metrics small{margin-top:2px}
+ .overview-distribution .allocation{margin-bottom:8px}.overview-notes{margin-top:12px}
+}
+
+.overview-groups .overview-distribution .section-head{min-height:24px;margin-bottom:10px}
