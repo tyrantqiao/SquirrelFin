@@ -4,6 +4,18 @@ const F=require('../app/src/main/assets/engine.js');
 const report=(period,date,transactions=[],today=date)=>F.ledgerReport({...F.blank(),transactions},period,date,today);
 const tx=(date,type,amount,extra={})=>({date,type,amount,...extra});
 
+test('daily overview includes account-free spending and income only on the selected day',()=>{
+ const transactions=[tx('2026-10-12','expense',1234,{asset:null}),tx('2026-10-12','income',2000,{asset:'cash'}),tx('2026-10-12','expense',900,{linked:'funding'}),tx('2026-10-12','deposit',900),tx('2026-10-12','withdraw',500),tx('2026-10-12','transfer',200),tx('2026-10-11','expense',100),tx('2026-10-13','income',100)];
+ const r=F.dailyLedger({...F.blank(),transactions},'2026-10-12');
+ assert.equal(r.income,2000);assert.equal(r.expense,1234);assert.equal(r.net,766);assert.equal(r.count,2);assert.deepEqual(r.rows,transactions.slice(0,2));
+ const month=report('month','2026-10-12',transactions);assert.equal(month.expense,r.expense+100);assert.equal(month.income,r.income);
+});
+
+test('daily overview handles deficit, empty day and invalid dates without mutating records',()=>{
+ const s=F.blank();s.transactions=[tx('2026-10-12','expense',1),tx('2026-10-12','expense',2)];const before=JSON.stringify(s);
+ assert.equal(F.dailyLedger(s,'2026-10-12').net,-3);assert.deepEqual(F.dailyLedger(s,'2026-10-11'),{date:'2026-10-11',rows:[],income:0,expense:0,net:0,count:0});assert.throws(()=>F.dailyLedger(s,'2026-02-30'));assert.equal(JSON.stringify(s),before);
+});
+
 test('source and account breakdown exclude funding and keep unassigned entries separate',()=>{
  const r=report('month','2026-10-12',[tx('2026-10-01','income',1000,{asset:'cash',sourceCategory:'工资'}),tx('2026-10-02','income',200),tx('2026-10-02','income',50,{sourceCategory:'__proto__'}),tx('2026-10-03','expense',300,{asset:'cash'}),tx('2026-10-03','expense',100),tx('2026-10-03','expense',900,{asset:'cash',linked:'investment'}),tx('2026-10-03','transfer',400,{asset:'cash'})]);
  assert.equal(r.incomeSources['工资'],1000);assert.equal(r.incomeSources['未标注来源'],200);assert.equal(r.incomeSources.__proto__,50);assert.equal(r.incomeCount,3);

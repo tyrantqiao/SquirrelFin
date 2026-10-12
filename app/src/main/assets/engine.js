@@ -11,6 +11,13 @@
   const expenseCategories=['餐饮','居住','交通','购物','水电通讯','医疗','教育','健身','娱乐','人情','保险','其他'];
   const expenseNatures={fixed:'固定支出',variable:'日常可变',occasional:'偶发支出'};
   function blank() { return {version:1,assets:[],transactions:[],plans:[],executions:[],expenseTemplates:[]}; }
+  function ledgerRows(state,from,to) {return state.transactions.filter(t=>t.date>=from&&t.date<=to&&!t.linked&&['income','expense'].includes(t.type));}
+  function dailyLedger(state,date) {
+    if(!validDate(date))throw Error('统计日期无效');
+    const rows=ledgerRows(state,date,date);let income=0,expense=0;
+    for(const t of rows){if(t.type==='income')income+=t.amount;else expense+=t.amount;}
+    return {date,rows,income,expense,net:income-expense,count:rows.length};
+  }
   function expenseSummary(state,month) {
     const expenses=state.transactions.filter(t=>t.type==='expense'&&!t.linked&&t.date.slice(0,7)===month);
     const categories={},natures={fixed:0,variable:0,occasional:0,unclassified:0};
@@ -31,7 +38,7 @@
     const [previousStart,previousFullEnd]=bounds(iso(day(start)-1));
     const previousEnd=iso(Math.min(day(previousFullEnd),day(previousStart)+days-1));
     const summarize=(from,to)=>{
-      const rows=state.transactions.filter(t=>t.date>=from&&t.date<=to&&!t.linked&&['income','expense'].includes(t.type));
+      const rows=ledgerRows(state,from,to);
       const categories={},natures={fixed:0,variable:0,occasional:0,unclassified:0};let income=0,expense=0;
       for(const t of rows) {if(t.type==='income')income+=t.amount;else{expense+=t.amount;const c=t.category||'未分类';categories[c]=(categories[c]||0)+t.amount;natures[t.nature||'unclassified']+=t.amount;}}
       return {rows,income,expense,net:income-expense,categories,natures};
@@ -266,6 +273,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
