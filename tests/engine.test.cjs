@@ -1,6 +1,20 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const F=require('../app/src/main/assets/engine.js');
+test('asset history leaves missing balances unknown and separates financial from physical assets',()=>{
+ const s=F.blank();s.assets=[{id:'c',kind:'cash',snapshots:[{date:'2026-05-01',value:10000,opening:true}]},{id:'d',kind:'debt',snapshots:[{date:'2026-05-01',value:2000}]},{id:'i',kind:'item',snapshots:[{date:'2026-10-02',value:5000}]},{id:'future',kind:'cash',snapshots:[{date:'2026-11-01',value:999999}]}];s.transactions=[{id:'x',type:'income',asset:'c',date:'2026-05-01',amount:1000},{id:'y',type:'expense',asset:'c',date:'2026-10-14',amount:500}];
+ const before=JSON.stringify(s),h=F.assetHistory(s,'2026-10-14');assert.equal(h.points.length,6);assert.equal(h.points[0].date,'2026-05-31');assert.equal(h.points[0].financial,9000);assert.equal(h.points[0].net,null);assert.equal(h.points.at(-1).financial,8500);assert.equal(h.points.at(-1).net,13500);assert.equal(JSON.stringify(s),before);
+ const prior=F.assetHistory(s,'2026-04-01');assert.equal(prior.points.at(-1).financial,null);assert.equal(prior.points.at(-1).net,null);assert.throws(()=>F.assetHistory(s,'2026-02-30'));assert.throws(()=>F.assetHistory(s,'2026-10-14',7));
+});
+test('asset history includes transfers only once, handles negative net worth and year boundaries',()=>{
+ const s=F.blank();s.assets=[{id:'a',kind:'cash',snapshots:[{date:'2025-01-01',value:1000}]},{id:'b',kind:'investment',snapshots:[{date:'2025-01-01',value:2000}]},{id:'d',kind:'debt',snapshots:[{date:'2025-01-01',value:5000}]}];s.transactions=[{id:'t',type:'transfer',asset:'a',to:'b',date:'2025-12-31',amount:500}];
+ const h=F.assetHistory(s,'2026-01-01',12);assert.equal(h.points[0].date,'2025-02-28');assert.equal(h.points.at(-2).financial,-2000);assert.equal(h.points.at(-1).financial,-2000);assert.equal(h.points.at(-1).date,'2026-01-01');assert.equal(F.assetHistory(F.blank(),'2026-01-01').points.at(-1).net,null);
+});
+test('asset report separates balance changes, missing history and verified investment gains',()=>{
+ const s=F.blank();s.assets=[{id:'a',kind:'investment',snapshots:[{date:'2026-09-01',value:10000,opening:true},{date:'2026-10-10',value:15500,confirmed:false}]},{id:'d',kind:'debt',snapshots:[{date:'2026-09-01',value:2000}]},{id:'i',kind:'item',snapshots:[{date:'2026-10-02',value:3000}]},{id:'future',kind:'cash',snapshots:[{date:'2026-11-01',value:999999}]}];s.transactions=[{id:'t',type:'deposit',asset:'a',date:'2026-10-02',amount:5000}];
+ const before=JSON.stringify(s),r=F.assetReport(s,'2026-10-14');assert.equal(r.totals.financial,13500);assert.equal(r.totals.net,16500);assert.equal(r.rows[0].delta,5500);assert.equal(r.rows[0].performance.gain,500);assert.equal(r.rows[0].performance.complete,false);assert.equal(r.rows[2].delta,null);assert.equal(r.missingPrevious,2);assert.equal(r.rows[3].value,0);assert.equal(JSON.stringify(s),before);
+ s.assets[0].snapshots[1].confirmed=true;assert.equal(F.assetReport(s,'2026-10-14').rows[0].performance.complete,true);assert.equal(F.assetReport(F.blank(),'2026-01-01').previous,'2025-12-31');assert.throws(()=>F.assetReport(s,'2026-02-30'));
+});
 test('monthly overview aligns cash flow and asset balances to historical month end',()=>{
  const s=F.blank();const a=(id,kind,value)=>({id,kind,snapshots:[{date:'2026-01-01',value,opening:true},{date:'2026-03-01',value:999999}]});
  s.assets=[a('cash','cash',10000),a('debt','debt',2000),a('item','item',3000),{id:'later',kind:'investment',snapshots:[{date:'2026-03-02',value:50000}]}];

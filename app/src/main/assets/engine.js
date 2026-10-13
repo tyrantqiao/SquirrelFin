@@ -44,6 +44,32 @@
     assets.financial=assets.cash+assets.investment-assets.debt;assets.net=assets.financial+assets.item;
     return {month,start:report.start,end:report.end,income:report.income,expense:report.expense,net:report.net,assets,missing,recorded};
   }
+  function assetHistory(state,at,months=6) {
+    if(!validDate(at)||![6,12].includes(months))throw Error('资产历史区间无效');
+    const current=state.assets.filter(a=>a.snapshots.some(v=>v.date<=at)),points=[];
+    for(let i=months-1;i>=0;i--){
+      const monthStart=new Date(at.slice(0,7)+'-01T00:00:00Z');monthStart.setUTCMonth(monthStart.getUTCMonth()-i);
+      const next=new Date(monthStart);next.setUTCMonth(next.getUTCMonth()+1);
+      const date=i===0?at:new Date(next.getTime()-86400000).toISOString().slice(0,10),totals={cash:0,investment:0,item:0,debt:0};let missingFinancial=0,missingItem=0;
+      for(const a of current){if(!a.snapshots.some(v=>v.date<=date)){if(a.kind==='item')missingItem++;else missingFinancial++;continue;}totals[a.kind]+=balance(state,a,date);}
+      const financial=current.some(a=>a.kind!=='item')&&!missingFinancial?totals.cash+totals.investment-totals.debt:null;
+      const net=current.length&&!missingFinancial&&!missingItem?totals.cash+totals.investment-totals.debt+totals.item:null;
+      points.push({date,financial,net,missing:missingFinancial+missingItem});
+    }
+    return {at,months,points};
+  }
+  function assetReport(state,at) {
+    if(!validDate(at))throw Error('统计日期无效');
+    const previous=new Date((day(at.slice(0,7)+'-01')-1)*86400000).toISOString().slice(0,10),totals={cash:0,investment:0,item:0,debt:0};let missingPrevious=0;
+    const rows=state.assets.map(a=>{
+      const snaps=a.snapshots.filter(v=>v.date<=at).sort((a,b)=>a.date.localeCompare(b.date)),last=snaps.at(-1),current=balance(state,a,at),hasPrevious=a.snapshots.some(v=>v.date<=previous);
+      if(!hasPrevious)missingPrevious++;totals[a.kind]+=current;
+      const p=performance(state,{...a,snapshots:snaps});
+      return {id:a.id,kind:a.kind,value:current,previous:hasPrevious?balance(state,a,previous):null,delta:hasPrevious?current-balance(state,a,previous):null,lastDate:last?.date||null,stale:last?day(at)-day(last.date)>90:true,performance:p};
+    });
+    totals.financial=totals.cash+totals.investment-totals.debt;totals.net=totals.financial+totals.item;
+    return {at,previous,totals,rows,missingPrevious,stale:rows.filter(r=>r.stale).length};
+  }
   function ledgerReport(state,period,anchor,today) {
     if(!['week','month','year'].includes(period)||!validDate(anchor)||!validDate(today)||anchor>today) throw Error('统计区间无效');
     const iso=n=>new Date(n*86400000).toISOString().slice(0,10);
@@ -293,6 +319,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,monthlyOverview,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
