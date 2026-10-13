@@ -1,6 +1,36 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const F=require('../app/src/main/assets/engine.js');
+test('monthly overview aligns cash flow and asset balances to historical month end',()=>{
+ const s=F.blank();const a=(id,kind,value)=>({id,kind,snapshots:[{date:'2026-01-01',value,opening:true},{date:'2026-03-01',value:999999}]});
+ s.assets=[a('cash','cash',10000),a('debt','debt',2000),a('item','item',3000),{id:'later',kind:'investment',snapshots:[{date:'2026-03-02',value:50000}]}];
+ s.transactions=[{id:'income',date:'2026-02-01',type:'income',asset:'cash',amount:5000},{id:'expense',date:'2026-02-28',type:'expense',asset:'cash',amount:1000},{id:'future',date:'2026-03-01',type:'income',asset:'cash',amount:8888},{id:'funding',date:'2026-02-02',type:'expense',asset:'cash',amount:500,linked:'deposit'}];
+ const before=JSON.stringify(s),r=F.monthlyOverview(s,'2026-02','2026-03-15');
+ assert.equal(r.end,'2026-02-28');assert.equal(r.income,5000);assert.equal(r.expense,1000);assert.equal(r.net,4000);assert.equal(r.assets.financial,11500);assert.equal(r.assets.net,14500);assert.equal(r.assets.debt,2000);assert.equal(r.missing,1);assert.equal(r.recorded,3);assert.equal(JSON.stringify(s),before);
+});
+test('monthly overview handles leap month, current cutoff, opening boundaries and missing history',()=>{
+ const s=F.blank();s.assets=[{id:'cash',kind:'cash',snapshots:[{date:'2024-02-29',value:1000,opening:true}]}];s.transactions=[{id:'opening',date:'2024-02-29',type:'income',asset:'cash',amount:200},{id:'late',date:'2024-03-16',type:'income',asset:'cash',amount:300}];
+ assert.equal(F.monthlyOverview(s,'2024-02','2024-03-15').end,'2024-02-29');assert.equal(F.monthlyOverview(s,'2024-02','2024-03-15').assets.financial,1200);
+ const current=F.monthlyOverview(s,'2024-03','2024-03-15');assert.equal(current.end,'2024-03-15');assert.equal(current.income,0);assert.equal(current.assets.financial,1200);
+ const missing=F.monthlyOverview(s,'2024-01','2024-03-15');assert.equal(missing.missing,1);assert.equal(missing.recorded,0);
+ s.assets[0].snapshots[0].opening=false;assert.equal(F.monthlyOverview(s,'2024-02','2024-03-15').assets.financial,1000);
+ assert.throws(()=>F.monthlyOverview(s,'2024-04','2024-03-15'));assert.throws(()=>F.monthlyOverview(s,'2024-13','2024-03-15'));assert.throws(()=>F.monthlyOverview(s,'2024-2','2024-03-15'));
+ assert.equal(F.monthlyOverview(F.blank(),'2023-12','2024-01-01').end,'2023-12-31');
+});
+test('recent activity covers rolling seven days and keeps funding out of spending',()=>{
+ const s=F.blank();s.assets=[{id:'a',snapshots:[{date:'2026-09-30',value:10000,opening:true},{date:'2026-10-01',value:12000},{date:'2026-10-06',value:13000}]}];
+ s.transactions=[{id:'old',date:'2026-09-29',type:'income',amount:100},{id:'income',date:'2026-10-01',type:'income',amount:200},{id:'spend',date:'2026-10-06',type:'expense',amount:300},{id:'fund',date:'2026-10-06',type:'expense',amount:500,linked:'invest'},{id:'invest',date:'2026-10-06',type:'deposit',amount:500},{id:'future',date:'2026-10-07',type:'income',amount:999}];
+ const before=JSON.stringify(s),r=F.recentActivity(s,'2026-10-06','all',1,50);
+ assert.equal(r.start,'2026-09-30');assert.equal(r.count,7);assert.equal(r.rows[0].date,'2026-10-06');assert.equal(r.rows.find(v=>v.key==='snapshot:a:2026-09-30').opening,true);
+ assert.deepEqual(F.recentActivity(s,'2026-10-06','expense').rows.map(v=>v.id),['spend']);assert.equal(F.recentActivity(s,'2026-10-06','assets').count,5);assert.equal(JSON.stringify(s),before);
+});
+test('recent activity pagination is stable, clamps after filtering, and handles empty dates',()=>{
+ const s=F.blank();s.transactions=Array.from({length:11},(_,i)=>({id:String(i).padStart(2,'0'),date:'2026-01-01',type:'income',amount:i+1}));
+ const a=F.recentActivity(s,'2026-01-02','all',1),b=F.recentActivity(s,'2026-01-02','all',2),c=F.recentActivity(s,'2026-01-02','all',99);
+ assert.equal(a.pages,3);assert.equal(b.rows.length,5);assert.equal(c.page,3);assert.equal(c.rows.length,1);assert.equal(new Set([...a.rows,...b.rows,...c.rows].map(v=>v.key)).size,11);
+ const empty=F.recentActivity(s,'2026-01-02','expense',99);assert.equal(empty.page,1);assert.equal(empty.pages,1);assert.equal(empty.count,0);assert.equal(empty.start,'2025-12-27');
+ assert.throws(()=>F.recentActivity(s,'2026-02-30'));assert.throws(()=>F.recentActivity(s,'2026-01-02','all',0));assert.throws(()=>F.recentActivity(s,'2026-01-02','bad'));
+});
 const asset=(id='a',kind='investment')=>({id,name:id,kind,place:'本地',risk:'未知',snapshots:[{date:'2026-01-01',value:10000,confirmed:false},{date:'2026-02-01',value:10200,confirmed:true}]});
 test('100 → 102 is 2% for 31 days, not 2% annual',()=>{const s=F.blank(),a=asset();s.assets=[a];const p=F.performance(s,a);assert.equal(p.gain,200);assert.ok(Math.abs(p.rate-.02)<1e-12);assert.equal(p.days,31);assert.ok(Math.abs(p.annual-(1.02**(365/31)-1))<1e-8);});
 test('new principal is not investment gain',()=>{const s=F.blank(),a=asset();s.assets=[a];s.transactions=[{date:'2026-01-15',type:'deposit',asset:'a',amount:200}];const p=F.performance(s,a);assert.equal(p.gain,0);assert.equal(p.rate,null);assert.ok(Math.abs(p.annual)<1e-8);});

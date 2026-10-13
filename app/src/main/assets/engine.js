@@ -18,11 +18,31 @@
     for(const t of rows){if(t.type==='income')income+=t.amount;else expense+=t.amount;}
     return {date,rows,income,expense,net:income-expense,count:rows.length};
   }
+  function recentActivity(state,date,kind='all',page=1,size=5) {
+    if(!validDate(date)||!['all','assets','income','expense'].includes(kind)||!Number.isInteger(page)||page<1||!Number.isInteger(size)||size<1||size>50)throw Error('明细参数无效');
+    const start=new Date((day(date)-6)*86400000).toISOString().slice(0,10),rows=[];
+    for(const a of state.assets)for(const v of a.snapshots)if(v.date>=start&&v.date<=date)rows.push({key:'snapshot:'+a.id+':'+v.date,date:v.date,kind:'assets',asset:a.id,amount:v.value,opening:!!v.opening,record:'snapshot'});
+    for(const t of state.transactions)if(t.date>=start&&t.date<=date)rows.push({key:'tx:'+t.id,date:t.date,kind:!t.linked&&['income','expense'].includes(t.type)?t.type:'assets',asset:t.asset,id:t.id,amount:t.amount,type:t.type,linked:!!t.linked,note:t.note,category:t.category,to:t.to,record:'transaction'});
+    const filtered=rows.filter(r=>kind==='all'||r.kind===kind).sort((a,b)=>b.date.localeCompare(a.date)||a.key.localeCompare(b.key));
+    const count=filtered.length,pages=Math.max(1,Math.ceil(count/size)),current=Math.min(page,pages);
+    return {start,end:date,count,pages,page:current,rows:filtered.slice((current-1)*size,current*size)};
+  }
   function expenseSummary(state,month) {
     const expenses=state.transactions.filter(t=>t.type==='expense'&&!t.linked&&t.date.slice(0,7)===month);
     const categories={},natures={fixed:0,variable:0,occasional:0,unclassified:0};
     for(const t of expenses) {const category=t.category||'未分类';categories[category]=(categories[category]||0)+t.amount;natures[t.nature||'unclassified']+=t.amount;}
     return {total:expenses.reduce((n,t)=>n+t.amount,0),categories,natures};
+  }
+  function monthlyOverview(state,month,today) {
+    if(typeof month!=='string'||!/^\d{4}-\d{2}$/.test(month)||!validDate(month+'-01')||!validDate(today)||month>today.slice(0,7))throw Error('请选择有效的年月，不能晚于当前月份');
+    const report=ledgerReport(state,'month',month+'-01',today),assets={cash:0,investment:0,item:0,debt:0};
+    let missing=0,recorded=0;
+    for(const a of state.assets){
+      if(!a.snapshots.some(v=>v.date<=report.end)){missing++;continue;}
+      assets[a.kind]+=balance(state,a,report.end);recorded++;
+    }
+    assets.financial=assets.cash+assets.investment-assets.debt;assets.net=assets.financial+assets.item;
+    return {month,start:report.start,end:report.end,income:report.income,expense:report.expense,net:report.net,assets,missing,recorded};
   }
   function ledgerReport(state,period,anchor,today) {
     if(!['week','month','year'].includes(period)||!validDate(anchor)||!validDate(today)||anchor>today) throw Error('统计区间无效');
@@ -273,6 +293,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,monthlyOverview,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
