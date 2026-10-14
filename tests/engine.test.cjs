@@ -1,6 +1,12 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const F=require('../app/src/main/assets/engine.js');
+test('asset notes survive backup round trips and reject malformed notes without requiring legacy notes',()=>{
+ const s=F.blank();s.assets=[{id:'a',name:'余额宝',kind:'investment',place:'支付宝',risk:'未知 / 未评估',cost:0,snapshots:[{date:'2026-10-14',value:12345,confirmed:false,opening:true}]}];
+ assert.doesNotThrow(()=>F.validate(s));s.assets[0].note='日常备用金 <保留原文>';
+ const restored=F.validate(JSON.parse(JSON.stringify(s)));assert.equal(restored.assets[0].note,s.assets[0].note);assert.equal(restored.assets[0].snapshots[0].value,12345);
+ for(const note of [null,42,{},'长'.repeat(101)]){const invalid=JSON.parse(JSON.stringify(s));invalid.assets[0].note=note;assert.throws(()=>F.validate(invalid));}
+});
 test('asset history leaves missing balances unknown and separates financial from physical assets',()=>{
  const s=F.blank();s.assets=[{id:'c',kind:'cash',snapshots:[{date:'2026-05-01',value:10000,opening:true}]},{id:'d',kind:'debt',snapshots:[{date:'2026-05-01',value:2000}]},{id:'i',kind:'item',snapshots:[{date:'2026-10-02',value:5000}]},{id:'future',kind:'cash',snapshots:[{date:'2026-11-01',value:999999}]}];s.transactions=[{id:'x',type:'income',asset:'c',date:'2026-05-01',amount:1000},{id:'y',type:'expense',asset:'c',date:'2026-10-14',amount:500}];
  const before=JSON.stringify(s),h=F.assetHistory(s,'2026-10-14');assert.equal(h.points.length,6);assert.equal(h.points[0].date,'2026-05-31');assert.equal(h.points[0].financial,9000);assert.equal(h.points[0].net,null);assert.equal(h.points.at(-1).financial,8500);assert.equal(h.points.at(-1).net,13500);assert.equal(JSON.stringify(s),before);

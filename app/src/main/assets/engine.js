@@ -278,6 +278,7 @@
       ids.add(a.id);const dates=new Set();
       for(const v of a.snapshots) {if(!validDate(v.date)||!money(v.value)||v.value<0||dates.has(v.date)||typeof v.confirmed!=='boolean') fail();dates.add(v.date);}
       if(a.cost!==undefined&&(!money(a.cost)||a.cost<0)) fail();
+      if(a.note!==undefined&&(typeof a.note!=='string'||a.note.length>100)) fail();
     }
     const tids=new Set();
     for(const t of s.transactions) {
