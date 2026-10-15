@@ -161,6 +161,12 @@ progress {width:100%;height:12px;accent-color:#748574} .release-notes {white-spa
 /* Single-page entry; decimal input uses the Android keyboard. */
 .tx-basic-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .tx-basic-fields section{min-width:0}.tx-basic-fields input{min-width:0}
+.tx-note-history{margin:6px 0 10px;padding:0 10px 6px;background:#f0f2ea;border-radius:12px}
+.tx-note-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#76816e}
+.tx-note-heading button{min-height:44px;flex-shrink:0}
+.tx-note-results{max-height:132px;overflow-y:auto;overscroll-behavior:contain}
+.tx-note-choice{display:block;width:100%;min-height:44px;padding:10px 8px;background:transparent;color:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere;border-radius:8px}
+.tx-note-choice:hover,.tx-note-choice:focus-visible{background:#e3e8db}
 .tx-options{margin-top:8px;border-top:1px solid #e5e7dc}
 .tx-options>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:#61714f}
 .tx-options>summary:before{content:'＋';margin-right:8px}.tx-options[open]>summary:before{content:'−'}
