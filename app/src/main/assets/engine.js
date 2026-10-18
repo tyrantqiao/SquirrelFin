@@ -21,11 +21,20 @@
   function recentActivity(state,date,kind='all',page=1,size=5) {
     if(!validDate(date)||!['all','assets','income','expense'].includes(kind)||!Number.isInteger(page)||page<1||!Number.isInteger(size)||size<1||size>50)throw Error('明细参数无效');
     const start=new Date((day(date)-6)*86400000).toISOString().slice(0,10),rows=[];
-    for(const a of state.assets)for(const v of a.snapshots)if(v.date>=start&&v.date<=date)rows.push({key:'snapshot:'+a.id+':'+v.date,date:v.date,kind:'assets',asset:a.id,amount:v.value,opening:!!v.opening,record:'snapshot'});
-    for(const t of state.transactions)if(t.date>=start&&t.date<=date)rows.push({key:'tx:'+t.id,date:t.date,kind:!t.linked&&['income','expense'].includes(t.type)?t.type:'assets',asset:t.asset,id:t.id,amount:t.amount,type:t.type,linked:!!t.linked,note:t.note,category:t.category,to:t.to,record:'transaction'});
-    const filtered=rows.filter(r=>kind==='all'||r.kind===kind).sort((a,b)=>b.date.localeCompare(a.date)||a.key.localeCompare(b.key));
+    for(const a of state.assets)for(const v of a.snapshots)if(v.date>=start&&v.date<=date)rows.push({key:'snapshot:'+a.id+':'+v.date,date:v.date,savedAt:v.savedAt||0,order:rows.length,kind:'assets',asset:a.id,amount:v.value,opening:!!v.opening,record:'snapshot'});
+    for(const t of state.transactions)if(t.date>=start&&t.date<=date)rows.push({key:'tx:'+t.id,date:t.date,savedAt:t.savedAt||0,order:rows.length,kind:!t.linked&&['income','expense'].includes(t.type)?t.type:'assets',asset:t.asset,id:t.id,amount:t.amount,type:t.type,linked:!!t.linked,note:t.note,category:t.category,to:t.to,record:'transaction'});
+    const filtered=rows.filter(r=>kind==='all'||r.kind===kind).sort((a,b)=>b.date.localeCompare(a.date)||b.savedAt-a.savedAt||b.order-a.order);
     const count=filtered.length,pages=Math.max(1,Math.ceil(count/size)),current=Math.min(page,pages);
     return {start,end:date,count,pages,page:current,rows:filtered.slice((current-1)*size,current*size)};
+  }
+  function markActivitySaved(previous,next,now=Date.now()) {
+    const snapshots=new Map(previous.assets.flatMap(a=>a.snapshots.map(v=>[a.id+':'+v.date,v]))),transactions=new Map(previous.transactions.map(t=>[t.id,t]));
+    // A monotonic save time also preserves ordering when the device clock moves back.
+    let savedAt=now;
+    for(const v of [...snapshots.values(),...transactions.values()])savedAt=Math.max(savedAt,(v.savedAt||0)+1);
+    for(const a of next.assets)for(const v of a.snapshots){const old=snapshots.get(a.id+':'+v.date);if(!old||old.value!==v.value||!!old.opening!==!!v.opening||old.savedAt!==v.savedAt)v.savedAt=savedAt;}
+    for(const t of next.transactions){const old=transactions.get(t.id);if(!old||['date','type','asset','to','amount','note','category','nature','sourceCategory','linked'].some(k=>old[k]!==t[k]))t.savedAt=savedAt;}
+    return next;
   }
   function expenseSummary(state,month) {
     const expenses=state.transactions.filter(t=>t.type==='expense'&&!t.linked&&t.date.slice(0,7)===month);
@@ -271,17 +280,19 @@
   function validate(s) {
     const fail=()=>{throw Error('备份格式或数据关联无效');};
     const money=n=>Number.isSafeInteger(n)&&Math.abs(n)<=1e14;
+    const savedTime=v=>v===undefined||Number.isSafeInteger(v)&&v>0&&v<Number.MAX_SAFE_INTEGER;
     if(!s||s.version!==1||!['assets','transactions','plans','executions'].every(k=>Array.isArray(s[k])&&s[k].length<=20000)) fail();
     const ids=new Set();
     for(const a of s.assets) {
       if(typeof a.id!=='string'||ids.has(a.id)||typeof a.name!=='string'||!a.name.trim()||a.name.length>100||!['cash','investment','item','debt'].includes(a.kind)||typeof a.place!=='string'||typeof a.risk!=='string'||!Array.isArray(a.snapshots)||a.snapshots.length<1) fail();
       ids.add(a.id);const dates=new Set();
-      for(const v of a.snapshots) {if(!validDate(v.date)||!money(v.value)||v.value<0||dates.has(v.date)||typeof v.confirmed!=='boolean') fail();dates.add(v.date);}
+      for(const v of a.snapshots) {if(!validDate(v.date)||!money(v.value)||v.value<0||dates.has(v.date)||typeof v.confirmed!=='boolean'||!savedTime(v.savedAt)) fail();dates.add(v.date);}
       if(a.cost!==undefined&&(!money(a.cost)||a.cost<0)) fail();
       if(a.note!==undefined&&(typeof a.note!=='string'||a.note.length>100)) fail();
     }
     const tids=new Set();
     for(const t of s.transactions) {
+      if(!savedTime(t.savedAt)) fail();
       if(typeof t.id!=='string'||tids.has(t.id)||!(ids.has(t.asset)||t.asset===null&&['income','expense'].includes(t.type)&&!t.linked&&!t.to)||!validDate(t.date)||!money(t.amount)||t.amount<=0||typeof t.note!=='string'||!['income','expense','transfer','deposit','withdraw'].includes(t.type)) fail();
       const a=s.assets.find(a=>a.id===t.asset);
       if(a&&(['item','debt'].includes(a.kind)||t.date<a.snapshots.map(v=>v.date).sort()[0])) fail();
@@ -320,6 +331,6 @@
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

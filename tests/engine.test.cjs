@@ -48,8 +48,26 @@ test('recent activity pagination is stable, clamps after filtering, and handles 
  const s=F.blank();s.transactions=Array.from({length:11},(_,i)=>({id:String(i).padStart(2,'0'),date:'2026-01-01',type:'income',amount:i+1}));
  const a=F.recentActivity(s,'2026-01-02','all',1),b=F.recentActivity(s,'2026-01-02','all',2),c=F.recentActivity(s,'2026-01-02','all',99);
  assert.equal(a.pages,3);assert.equal(b.rows.length,5);assert.equal(c.page,3);assert.equal(c.rows.length,1);assert.equal(new Set([...a.rows,...b.rows,...c.rows].map(v=>v.key)).size,11);
+ assert.deepEqual(a.rows.map(v=>v.id),['10','09','08','07','06']);
  const empty=F.recentActivity(s,'2026-01-02','expense',99);assert.equal(empty.page,1);assert.equal(empty.pages,1);assert.equal(empty.count,0);assert.equal(empty.start,'2025-12-27');
  assert.throws(()=>F.recentActivity(s,'2026-02-30'));assert.throws(()=>F.recentActivity(s,'2026-01-02','all',0));assert.throws(()=>F.recentActivity(s,'2026-01-02','bad'));
+});
+test('recent activity orders same-day saves across assets and transactions before paginating',()=>{
+ const before=F.blank();before.assets=[{id:'a',name:'现金',kind:'cash',place:'本地',risk:'未知',snapshots:[{date:'2026-10-17',value:10000,confirmed:true,savedAt:100}]}];
+ before.transactions=[{id:'z',type:'income',asset:'a',date:'2026-10-18',amount:100,note:'较早',savedAt:200}];
+ const next=JSON.parse(JSON.stringify(before));next.transactions.push({id:'a',type:'expense',asset:'a',date:'2026-10-18',amount:50,note:'最新'});
+ F.markActivitySaved(before,next,300);assert.equal(next.transactions[1].savedAt,300);
+ assert.deepEqual(F.recentActivity(next,'2026-10-18').rows.map(v=>v.key),['tx:a','tx:z','snapshot:a:2026-10-17']);
+ const updated=JSON.parse(JSON.stringify(next));updated.assets[0].snapshots.push({date:'2026-10-18',value:10050,confirmed:true});
+ F.markActivitySaved(next,updated,250);assert.equal(updated.assets[0].snapshots[1].savedAt,301);
+ assert.equal(F.recentActivity(updated,'2026-10-18','all',1,1).rows[0].record,'snapshot');
+ assert.equal(F.recentActivity(updated,'2026-10-18','all',2,1).rows[0].id,'a');
+ const edited=JSON.parse(JSON.stringify(updated));edited.transactions[0].note='修改后';edited.assets[0].snapshots[1].confirmed=false;
+ F.markActivitySaved(updated,edited,400);assert.equal(edited.assets[0].snapshots[1].savedAt,301);assert.equal(F.recentActivity(edited,'2026-10-18').rows[0].id,'z');
+ const resaved=JSON.parse(JSON.stringify(edited));resaved.assets[0].snapshots[1].savedAt=450;F.markActivitySaved(edited,resaved,450);assert.equal(F.recentActivity(resaved,'2026-10-18').rows[0].record,'snapshot');
+ assert.doesNotThrow(()=>F.validate(JSON.parse(JSON.stringify(edited))));
+ for(const savedAt of [null,-1,1.5,'400',Number.MAX_SAFE_INTEGER]){const bad=JSON.parse(JSON.stringify(edited));bad.transactions[0].savedAt=savedAt;assert.throws(()=>F.validate(bad));bad.transactions[0].savedAt=400;bad.assets[0].snapshots[0].savedAt=savedAt;assert.throws(()=>F.validate(bad));}
+ assert.equal(before.transactions[0].savedAt,200);
 });
 const asset=(id='a',kind='investment')=>({id,name:id,kind,place:'本地',risk:'未知',snapshots:[{date:'2026-01-01',value:10000,confirmed:false},{date:'2026-02-01',value:10200,confirmed:true}]});
 test('100 → 102 is 2% for 31 days, not 2% annual',()=>{const s=F.blank(),a=asset();s.assets=[a];const p=F.performance(s,a);assert.equal(p.gain,200);assert.ok(Math.abs(p.rate-.02)<1e-12);assert.equal(p.days,31);assert.ok(Math.abs(p.annual-(1.02**(365/31)-1))<1e-8);});
