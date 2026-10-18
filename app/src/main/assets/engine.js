@@ -39,17 +39,52 @@
     const inputs=energyInputs(state,p),net=inputs.income-inputs.cost,minutes=p.work+p.commute+p.recovery;
     return {...inputs,net,minutes,hourly:net>0?net*60/minutes:null,reason:net<=0?'本期工作净收入不为正，暂不换算消费时间':''};
   }
+  function energyReference(state,date) {
+    if(!validDate(date))throw Error('换算日期无效');
+    if(!state.lifeEnergy?.enabled)return null;
+    const profile=state.lifeEnergy.profiles.filter(p=>p.effective<=date).sort((a,b)=>b.effective.localeCompare(a.effective))[0];
+    if(!profile)return {reason:'此日期尚无生效的参考时薪'};
+    return {profile,...energyRate(profile,state)};
+  }
+  function energyFraction(numerator,denominator) {
+    const rounded=(numerator*2n+denominator)/(denominator*2n);
+    if(rounded>BigInt(Number.MAX_SAFE_INTEGER))return {reason:'折合时间超出显示范围'};
+    return {minutesRounded:Number(rounded),underMinute:numerator>0n&&numerator<denominator};
+  }
+  function energyValue(state,amount,date) {
+    if(!Number.isSafeInteger(amount))throw Error('换算金额无效');
+    const rate=energyReference(state,date);if(!rate||rate.reason)return rate;
+    const numerator=BigInt(amount)*BigInt(rate.minutes),denominator=BigInt(rate.net);
+    return {...rate,negative:amount<0,...energyFraction(numerator<0n?-numerator:numerator,denominator)};
+  }
   function energyFor(state,t) {
     if(!state.lifeEnergy?.enabled||t.type!=='expense'||t.linked)return null;
-    const profile=state.lifeEnergy.profiles.filter(p=>p.effective<=t.date).sort((a,b)=>b.effective.localeCompare(a.effective))[0];
-    if(!profile)return {reason:'此日期尚无生效的参考时薪'};
-    const rate=energyRate(profile,state);if(rate.reason)return {profile,...rate};
+    return energyForReference(t,energyReference(state,t.date));
+  }
+  function energyForReference(t,rate) {
+    if(rate.reason)return rate;
     if(!Number.isSafeInteger(t.amount)||t.amount<0||t.amount>1e14)throw Error('换算金额无效');
-    const amount=profile.costSource==='ledger'&&t.date.slice(0,7)===profile.month&&['commute','meal','work'].includes(t.workTag)?t.amount-t.workCost:t.amount;
-    const numerator=BigInt(amount)*BigInt(rate.minutes),denominator=BigInt(rate.net),rounded=(numerator*2n+denominator)/(denominator*2n);
-    // Keep exact integer arithmetic until display; cap results that cannot be represented safely.
-    if(rounded>BigInt(Number.MAX_SAFE_INTEGER))return {profile,...rate,reason:'折合时间超出显示范围'};
-    return {profile,...rate,convertedAmount:amount,excludedCost:t.amount-amount,minutesRounded:Number(rounded),underMinute:numerator>0n&&numerator<denominator};
+    const amount=rate.profile.costSource==='ledger'&&t.date.slice(0,7)===rate.profile.month&&['commute','meal','work'].includes(t.workTag)?t.amount-t.workCost:t.amount;
+    return {...rate,convertedAmount:amount,excludedCost:t.amount-amount,...energyFraction(BigInt(amount)*BigInt(rate.minutes),BigInt(rate.net))};
+  }
+  function energyReport(state,start,end) {
+    if(!validDate(start)||!validDate(end)||start>end)throw Error('生命能量统计区间无效');
+    if(!state.lifeEnergy?.enabled)return null;
+    const groups=new Map(),categories=new Map(),rates=new Map(),profiles=[...state.lifeEnergy.profiles].sort((a,b)=>b.effective.localeCompare(a.effective)),uncoveredReasons={missingProfile:0,nonpositive:0,overflow:0};let count=0,covered=0,total=0n,uncovered=0n,excluded=0n,converted=0n,unallocatedCost=false;
+    const add=(map,key,r)=>{if(!map.has(key))map.set(key,new Map());const group=map.get(key);if(!group.has(r.profile.id))group.set(r.profile.id,{amount:0n,minutes:r.minutes,net:r.net});group.get(r.profile.id).amount+=BigInt(r.convertedAmount);};
+    for(const t of state.transactions){
+      if(t.date<start||t.date>end||t.type!=='expense'||t.linked)continue;
+      count++;total+=BigInt(t.amount);const p=profiles.find(p=>p.effective<=t.date);
+      if(p&&!rates.has(p.id))rates.set(p.id,{profile:p,...energyRate(p,state)});
+      const r=energyForReference(t,p?rates.get(p.id):{reason:'此日期尚无生效的参考时薪'});
+      if(r.reason){uncovered+=BigInt(t.amount);uncoveredReasons[!r.profile?'missingProfile':r.net<=0?'nonpositive':'overflow']++;continue;}
+      covered++;excluded+=BigInt(r.excludedCost);converted+=BigInt(r.convertedAmount);unallocatedCost||=r.profile.cost>0;
+      add(groups,'all',r);add(categories,t.category||'未分类',r);
+    }
+    const gcd=(a,b)=>{while(b){const next=a%b;a=b;b=next;}return a;};
+    const time=group=>{let n=0n,d=1n;for(const r of group?.values()||[]){const rd=BigInt(r.net),rn=r.amount*BigInt(r.minutes),g=gcd(d,rd);n=n*(rd/g)+rn*(d/g);d=d/g*rd;const reduce=gcd(n,d);n/=reduce;d/=reduce;}return energyFraction(n,d);};
+    const safe=n=>n<=BigInt(Number.MAX_SAFE_INTEGER)?Number(n):null;
+    return {start,end,count,covered,uncoveredCount:count-covered,uncoveredReasons,total:safe(total),uncovered:safe(uncovered),excluded:safe(excluded),converted:safe(converted),unallocatedCost,...time(groups.get('all')),categories:[...categories].map(([category,group])=>({category,amount:safe([...group.values()].reduce((n,r)=>n+r.amount,0n)),...time(group)}))};
   }
   function ledgerRows(state,from,to) {return state.transactions.filter(t=>t.date>=from&&t.date<=to&&!t.linked&&['income','expense'].includes(t.type));}
   function dailyLedger(state,date) {
@@ -381,6 +416,6 @@
     for(const p of s.lifeEnergy?.profiles||[])energyInputs(s,p);
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger,validateEnergyProfile,energyInputs,energyRate,energyFor};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger,validateEnergyProfile,energyInputs,energyRate,energyFor,energyReference,energyValue,energyReport};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

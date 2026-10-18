@@ -77,3 +77,41 @@ test('legacy manual profiles remain manual and the new extension cannot masquera
  const legacy=state();assert.equal(legacy.lifeEnergy.schema,1);const p=profile({incomeSource:'ledger'}),s=state([p]);assert.equal(s.lifeEnergy.schema,2);assert.doesNotThrow(()=>F.validate(s));s.lifeEnergy.schema=1;assert.throws(()=>F.validate(s));
  const before=F.energyRate(legacy.lifeEnergy.profiles[0]);legacy.transactions=[tx('salary','income',999999,{workTag:'salary'})];assert.equal(F.energyRate(legacy.lifeEnergy.profiles[0],legacy).hourly,before.hourly);
 });
+test('asset amounts use the current effective wage, preserve negative wealth as a deficit and do not mutate balances',()=>{
+ const s=state([profile({income:600000,cost:0,work:6000,commute:0,recovery:0}),profile({id:'new',effective:'2026-10-15',income:1200000,cost:0,work:6000,commute:0,recovery:0})]),before=JSON.stringify(s);
+ assert.equal(F.energyValue(s,120000,'2026-10-14').minutesRounded,1200);
+ const r=F.energyValue(s,-120000,'2026-10-18');assert.equal(r.minutesRounded,600);assert.equal(r.negative,true);assert.equal(r.profile.id,'new');
+ assert.equal(F.energyValue(s,0,'2026-10-18').minutesRounded,0);assert.match(F.energyValue(s,1,'2026-09-30').reason,/尚无/);assert.equal(JSON.stringify(s),before);
+});
+test('expense report sums exact fractions across wage profiles before rounding and lists category coverage',()=>{
+ const s=state([profile({income:100,cost:0,work:60,commute:0,recovery:0}),profile({id:'new',effective:'2026-10-15',income:125,cost:0,work:100,commute:0,recovery:0})]);
+ s.transactions=[tx('a','expense',1,{date:'2026-10-10',category:'餐饮'}),tx('b','expense',1,{date:'2026-10-16',category:'餐饮'}),tx('missing','expense',300,{date:'2026-09-30'})];
+ const before=JSON.stringify(s),r=F.energyReport(s,'2026-09-01','2026-10-31');
+ assert.equal(r.count,3);assert.equal(r.covered,2);assert.equal(r.uncoveredCount,1);assert.equal(r.uncovered,300);assert.equal(r.minutesRounded,1);assert.equal(r.underMinute,false);assert.equal(r.converted,2);assert.equal(r.categories[0].minutesRounded,1);assert.equal(JSON.stringify(s),before);
+});
+test('report excludes investment movements and netted work costs while retaining partial personal consumption',()=>{
+ const p=profile({income:0,cost:0,incomeSource:'ledger',costSource:'ledger'}),s=state([p]);
+ s.transactions=[tx('salary','income',1200000,{workTag:'salary'}),tx('cost','expense',10000,{workTag:'commute',workCost:10000}),tx('meal','expense',5000,{workTag:'meal',workCost:2000,category:'餐饮'}),tx('normal','expense',12000,{category:'餐饮'}),tx('transfer','transfer',999999),tx('deposit','deposit',999999),tx('withdraw','withdraw',999999),tx('funding','expense',999999,{linked:'deposit'})];
+ const r=F.energyReport(s,'2026-10-01','2026-10-31');assert.equal(r.count,3);assert.equal(r.covered,3);assert.equal(r.excluded,12000);assert.equal(r.converted,15000);assert.equal(r.total,27000);assert.equal(r.unallocatedCost,false);assert.equal(r.categories.find(c=>c.category==='餐饮').amount,15000);
+ s.transactions.find(t=>t.id==='meal').workCost=0;assert.equal(F.energyReport(s,'2026-10-01','2026-10-31').excluded,10000);
+});
+test('manual costs and unallocated supplements are explicitly flagged instead of implying complete net consumption',()=>{
+ const manual=state(),report=F.energyReport(manual,'2026-10-01','2026-10-31');assert.equal(report.count,0);
+ manual.transactions=[tx('e','expense',10000)];assert.equal(F.energyReport(manual,'2026-10-01','2026-10-31').unallocatedCost,true);
+ manual.lifeEnergy.profiles[0].costSource='ledger';assert.equal(F.energyReport(manual,'2026-10-01','2026-10-31').unallocatedCost,true);
+});
+test('unavailable wages, disabled conversion, empty intervals and large reports never invent covered time',()=>{
+ const s=state([profile({cost:1200000})]);s.transactions=[tx('e','expense',12000)];let r=F.energyReport(s,'2026-10-01','2026-10-31');assert.equal(r.covered,0);assert.equal(r.uncovered,12000);
+ s.lifeEnergy.enabled=false;assert.equal(F.energyReport(s,'2026-10-01','2026-10-31'),null);assert.equal(F.energyValue(s,100,'2026-10-18'),null);
+ assert.throws(()=>F.energyReport(s,'2026-10-31','2026-10-01'));
+ const huge=state([profile({income:1,cost:0,work:40000,commute:0,recovery:0})]);huge.transactions=[tx('a','expense',1e14)];assert.match(F.energyValue(huge,1e14,'2026-10-18').reason,/超出/);assert.equal(F.energyReport(huge,'2026-10-01','2026-10-31').covered,0);
+});
+test('a large aggregate never silently truncates integer cents or overflows the time display',()=>{
+ const s=state([profile({income:1,cost:0,work:1,commute:0,recovery:0})]);s.transactions=Array.from({length:100},(_,i)=>tx('large'+i,'expense',1e14));
+ const r=F.energyReport(s,'2026-10-01','2026-10-31');assert.equal(r.covered,100);assert.equal(r.total,null);assert.equal(r.converted,null);assert.equal(r.categories[0].amount,null);assert.match(r.reason,/超出/);
+});
+test('uncovered spending diagnoses historical gaps separately from invalid wages and display overflow',()=>{
+ const s=state([profile({effective:'2026-10-05',income:0,cost:0,work:1,commute:0,recovery:0}),profile({id:'large',effective:'2026-10-10',income:1,cost:0,work:40000,commute:0,recovery:0}),profile({id:'valid',effective:'2026-10-15',income:100,cost:0,work:60,commute:0,recovery:0})]);
+ s.transactions=[tx('missing','expense',100,{date:'2026-10-01'}),tx('no-wage','expense',100,{date:'2026-10-06'}),tx('too-large','expense',1e14,{date:'2026-10-12'}),tx('valid','expense',100,{date:'2026-10-16'})];
+ const r=F.energyReport(s,'2026-10-01','2026-10-31');assert.equal(r.covered,1);assert.equal(r.uncoveredCount,3);assert.deepEqual(r.uncoveredReasons,{missingProfile:1,nonpositive:1,overflow:1});assert.equal(r.minutesRounded,60);
+});
