@@ -11,6 +11,46 @@
   const expenseCategories=['餐饮','居住','交通','购物','水电通讯','医疗','教育','健身','娱乐','人情','保险','其他'];
   const expenseNatures={fixed:'固定支出',variable:'日常可变',occasional:'偶发支出'};
   function blank() { return {version:1,assets:[],transactions:[],plans:[],executions:[],expenseTemplates:[]}; }
+  function validateEnergyProfile(p) {
+    if(!p||typeof p.id!=='string'||!p.id.trim()||p.id.length>100||!validDate(p.effective)||typeof p.month!=='string'||!validDate(p.month+'-01'))throw Error('时薪档案日期无效');
+    for(const k of ['income','cost'])if(!Number.isSafeInteger(p[k])||p[k]<0||p[k]>1e14)throw Error('收入与成本须为非负金额');
+    for(const k of ['incomeSource','costSource'])if(p[k]!==undefined&&!['manual','ledger'].includes(p[k]))throw Error('时薪来源无效');
+    for(const k of ['work','commute','recovery'])if(!Number.isSafeInteger(p[k])||p[k]<0)throw Error('投入时间须为非负整数分钟');
+    const minutes=p.work+p.commute+p.recovery,days=new Date(Date.UTC(Number(p.month.slice(0,4)),Number(p.month.slice(5)),0)).getUTCDate();
+    if(!Number.isSafeInteger(minutes)||minutes<=0||minutes>days*1440)throw Error('总投入时间须大于零且不超过参考月份总时长');
+    if(p.daily!==undefined){
+      if(!p.daily||!Number.isInteger(p.daily.days)||p.daily.days<1||p.daily.days>days)throw Error('工作天数无效');
+      for(const k of ['work','commute','recovery'])if(!Number.isInteger(p.daily[k])||p.daily[k]<0||p.daily[k]*p.daily.days!==p[k])throw Error('每日时长与月度合计不一致');
+      if(p.daily.work+p.daily.commute+p.daily.recovery>1440)throw Error('每日投入不能超过 24 小时');
+    }
+    return p;
+  }
+  function energyInputs(state,p) {
+    validateEnergyProfile(p);let salary=0,costs=0,salaryCount=0,costCount=0;
+    for(const t of state.transactions){if(t.date.slice(0,7)!==p.month||t.linked)continue;
+      if(t.type==='income'&&t.workTag==='salary'){salary+=t.amount;salaryCount++;}
+      if(t.type==='expense'&&['commute','meal','work'].includes(t.workTag)){costs+=t.workCost;costCount++;}
+    }
+    const income=p.income+(p.incomeSource==='ledger'?salary:0),cost=p.cost+(p.costSource==='ledger'?costs:0);
+    if(!Number.isSafeInteger(income)||!Number.isSafeInteger(cost)||income>1e14||cost>1e14)throw Error('关联金额合计超出范围');
+    return {income,cost,salary,costs,salaryCount,costCount};
+  }
+  function energyRate(p,state={transactions:[]}) {
+    const inputs=energyInputs(state,p),net=inputs.income-inputs.cost,minutes=p.work+p.commute+p.recovery;
+    return {...inputs,net,minutes,hourly:net>0?net*60/minutes:null,reason:net<=0?'本期工作净收入不为正，暂不换算消费时间':''};
+  }
+  function energyFor(state,t) {
+    if(!state.lifeEnergy?.enabled||t.type!=='expense'||t.linked)return null;
+    const profile=state.lifeEnergy.profiles.filter(p=>p.effective<=t.date).sort((a,b)=>b.effective.localeCompare(a.effective))[0];
+    if(!profile)return {reason:'此日期尚无生效的参考时薪'};
+    const rate=energyRate(profile,state);if(rate.reason)return {profile,...rate};
+    if(!Number.isSafeInteger(t.amount)||t.amount<0||t.amount>1e14)throw Error('换算金额无效');
+    const amount=profile.costSource==='ledger'&&t.date.slice(0,7)===profile.month&&['commute','meal','work'].includes(t.workTag)?t.amount-t.workCost:t.amount;
+    const numerator=BigInt(amount)*BigInt(rate.minutes),denominator=BigInt(rate.net),rounded=(numerator*2n+denominator)/(denominator*2n);
+    // Keep exact integer arithmetic until display; cap results that cannot be represented safely.
+    if(rounded>BigInt(Number.MAX_SAFE_INTEGER))return {profile,...rate,reason:'折合时间超出显示范围'};
+    return {profile,...rate,convertedAmount:amount,excludedCost:t.amount-amount,minutesRounded:Number(rounded),underMinute:numerator>0n&&numerator<denominator};
+  }
   function ledgerRows(state,from,to) {return state.transactions.filter(t=>t.date>=from&&t.date<=to&&!t.linked&&['income','expense'].includes(t.type));}
   function dailyLedger(state,date) {
     if(!validDate(date))throw Error('统计日期无效');
@@ -111,7 +151,7 @@
       const key=t.asset||null;
       if(!accounts.has(key))accounts.set(key,{asset:key,income:0,expense:0,count:0});
       const account=accounts.get(key);account[t.type]+=t.amount;account.count++;
-      if(t.type==='income'){const source=t.sourceCategory||t.category||'未标注来源';incomeSources[source]=(incomeSources[source]||0)+t.amount;}
+      if(t.type==='income'){const source=t.workTag==='salary'?'工资 / 劳动收入':t.sourceCategory||t.category||'未标注来源';incomeSources[source]=(incomeSources[source]||0)+t.amount;}
       else{const w=weekdays[(new Date(day(t.date)*86400000).getUTCDay()+6)%7];w.expense+=t.amount;w.count++;daily.set(t.date,(daily.get(t.date)||0)+t.amount);}
     }
     weekdays.forEach(w=>w.average=w.days?Math.round(w.expense/w.days):null);
@@ -282,6 +322,10 @@
     const money=n=>Number.isSafeInteger(n)&&Math.abs(n)<=1e14;
     const savedTime=v=>v===undefined||Number.isSafeInteger(v)&&v>0&&v<Number.MAX_SAFE_INTEGER;
     if(!s||s.version!==1||!['assets','transactions','plans','executions'].every(k=>Array.isArray(s[k])&&s[k].length<=20000)) fail();
+    if(s.lifeEnergy!==undefined){
+      const e=s.lifeEnergy;if(!e||![1,2].includes(e.schema)||typeof e.enabled!=='boolean'||!Array.isArray(e.profiles)||e.profiles.length>1000)fail();
+      const pids=new Set(),dates=new Set();for(const p of e.profiles){validateEnergyProfile(p);if(e.schema===1&&(p.incomeSource!==undefined||p.costSource!==undefined||p.daily!==undefined))fail();if(pids.has(p.id)||dates.has(p.effective))fail();pids.add(p.id);dates.add(p.effective);}
+    }
     const ids=new Set();
     for(const a of s.assets) {
       if(typeof a.id!=='string'||ids.has(a.id)||typeof a.name!=='string'||!a.name.trim()||a.name.length>100||!['cash','investment','item','debt'].includes(a.kind)||typeof a.place!=='string'||typeof a.risk!=='string'||!Array.isArray(a.snapshots)||a.snapshots.length<1) fail();
@@ -299,6 +343,11 @@
       if(t.category!==undefined&&(t.type!=='expense'||t.linked||!expenseCategories.includes(t.category))) fail();
       if(t.nature!==undefined&&(t.type!=='expense'||t.linked||!Object.hasOwn(expenseNatures,t.nature))) fail();
       if(t.sourceCategory!==undefined&&(!['income','expense'].includes(t.type)||t.linked||typeof t.sourceCategory!=='string'||!t.sourceCategory.trim()||t.sourceCategory.length>40)) fail();
+      if(t.workTag!==undefined){
+        if(t.linked||!['salary','commute','meal','work'].includes(t.workTag)||t.workTag==='salary'&&t.type!=='income'||t.workTag!=='salary'&&t.type!=='expense')fail();
+        if(t.workTag!=='salary'&&(!money(t.workCost)||t.workCost<0||t.workCost>t.amount))fail();
+        if(t.workTag==='salary'&&t.workCost!==undefined)fail();
+      }else if(t.workCost!==undefined)fail();
       if(t.type==='transfer') {const to=s.assets.find(a=>a.id===t.to);if(!to||to.id===a.id||['item','debt'].includes(to.kind)||t.date<to.snapshots.map(v=>v.date).sort()[0]) fail();}
       tids.add(t.id);
     }
@@ -329,8 +378,9 @@
     }
     for(const t of s.transactions) if(t.linked) {const target=s.transactions.find(x=>x.id===t.linked);if(!target||target.type!=='deposit'||t.type!=='expense'||target.amount!==t.amount||target.date!==t.date) fail();}
     for(const a of s.assets) if(a.sold) {const t=s.transactions.find(t=>t.id===a.sold);if(a.kind!=='item'||!t||t.type!=='income'||!a.snapshots.some(v=>v.date===t.date&&v.value===0)||a.snapshots.some(v=>v.date>=t.date&&v.value!==0)) fail();}
+    for(const p of s.lifeEnergy?.profiles||[])energyInputs(s,p);
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger,validateEnergyProfile,energyInputs,energyRate,energyFor};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
