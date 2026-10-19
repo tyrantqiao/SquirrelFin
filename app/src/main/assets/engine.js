@@ -86,6 +86,31 @@
     const safe=n=>n<=BigInt(Number.MAX_SAFE_INTEGER)?Number(n):null;
     return {start,end,count,covered,uncoveredCount:count-covered,uncoveredReasons,total:safe(total),uncovered:safe(uncovered),excluded:safe(excluded),converted:safe(converted),unallocatedCost,...time(groups.get('all')),categories:[...categories].map(([category,group])=>({category,amount:safe([...group.values()].reduce((n,r)=>n+r.amount,0n)),...time(group)}))};
   }
+  // Spending pace uses all calendar hours, including days with no recorded entries.
+  function spendingWindow(at,window='month') {
+    if(!validDate(at)||!['month','previous','quarter'].includes(window))throw Error('支出基准无效');
+    const y=Number(at.slice(0,4)),m=Number(at.slice(5,7))-1,iso=d=>d.toISOString().slice(0,10);
+    return {start:iso(new Date(Date.UTC(y,m-(window==='quarter'?3:window==='previous'?1:0),1))),end:window==='month'?at:iso(new Date(Date.UTC(y,m,0)))};
+  }
+  function spendingPace(state,start,end) {
+    if(!validDate(start)||!validDate(end)||start>end)throw Error('支出统计区间无效');
+    const rows=ledgerRows(state,start,end).filter(t=>t.type==='expense'),days=day(end)-day(start)+1,durationMinutes=days*1440;
+    let total=0n;for(const t of rows){if(!Number.isSafeInteger(t.amount)||t.amount<0)throw Error('支出金额无效');total+=BigInt(t.amount);}
+    const expense=total<=BigInt(Number.MAX_SAFE_INTEGER)?Number(total):null;
+    return {start,end,days,durationMinutes,count:rows.length,recordedDays:new Set(rows.map(t=>t.date)).size,expense,
+      hourly:expense===null?null:expense/(days*24),reason:expense===null?'支出合计超出计算范围':total===0n?'暂无正值支出，暂不能估算续航':''};
+  }
+  function spendingSupport(amount,pace) {
+    if(!Number.isSafeInteger(amount))return {reason:'金额合计超出计算范围'};
+    if(pace.reason)return {reason:pace.reason};
+    return {deficit:amount<0,...energyFraction(BigInt(Math.max(0,amount))*BigInt(pace.durationMinutes),BigInt(pace.expense))};
+  }
+  function salaryComparison(state,pace,at) {
+    let ref;try{ref=energyReference(state,at);}catch(e){return {reason:e.message};}if(!ref?.profile)return {reason:'设置生效的工资档案后，可比较工资与开支'};
+    const p=ref.profile,coverage=spendingSupport(ref.income,pace);
+    const workCoverage=pace.reason?{reason:pace.reason}:p.work===0?{reason:'尚未填写工作时间'}:energyFraction(BigInt(ref.income)*60n*BigInt(pace.durationMinutes),BigInt(p.work)*BigInt(pace.expense));
+    return {profile:p,income:ref.income,cost:ref.cost,wageHourly:p.work>0?ref.income*60/p.work:null,realHourly:ref.hourly,coverage,workCoverage};
+  }
   function ledgerRows(state,from,to) {return state.transactions.filter(t=>t.date>=from&&t.date<=to&&!t.linked&&['income','expense'].includes(t.type));}
   function dailyLedger(state,date) {
     if(!validDate(date))throw Error('统计日期无效');
@@ -416,6 +441,6 @@
     for(const p of s.lifeEnergy?.profiles||[])energyInputs(s,p);
     return s;
   }
-  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger,validateEnergyProfile,energyInputs,energyRate,energyFor,energyReference,energyValue,energyReport};
+  const api={day,validDate,cents,blank,flow,balance,xirr,performance,snapshotReview,occurrences,planStats,validate,expenseCategories,expenseNatures,expenseSummary,dailyLedger,recentActivity,markActivitySaved,monthlyOverview,assetHistory,assetReport,ledgerReport,parseLedgerText,ledgerImportPreview,importLedger,validateEnergyProfile,energyInputs,energyRate,energyFor,energyReference,energyValue,energyReport,spendingWindow,spendingPace,spendingSupport,salaryComparison};
   if(typeof module!=='undefined') module.exports=api; else root.Fin=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
