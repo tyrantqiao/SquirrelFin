@@ -30,6 +30,26 @@ test('negative net assets have zero runway instead of absolute-value support',()
  assert.equal(F.spendingSupport(-10000,p).minutesRounded,0);assert.equal(F.spendingSupport(-10000,p).deficit,true);
  assert.equal(F.spendingSupport(0,p).minutesRounded,0);assert.equal(F.spendingSupport(1,p).underMinute,true);
 });
+
+test('all net assets support living expenses, including investments and item residuals less debt',()=>{
+ const s=F.blank();s.transactions=[tx(300000,'2026-09-01')];
+ s.assets=[['cash',300000],['investment',1200000],['item',600000],['debt',300000]].map(([kind,value],i)=>({id:'a'+i,kind,cost:kind==='item'?2000000:0,snapshots:[{date:'2026-08-01',value,opening:true}]}));
+ const p=F.spendingPace(s,'2026-09-01','2026-09-30'),t=F.assetReport(s,'2026-09-30').totals,r=F.spendingSupport(t.net,p);
+ assert.equal(p.daily,10000);assert.equal(p.monthly,300000);
+ assert.equal(t.net,1800000);assert.equal(r.days,180);assert.equal(r.months,6);
+ assert.equal(F.spendingSupport(t.cash,p).days,30);
+ // Investments and items still support the estimate without a cash account.
+ s.assets=s.assets.filter(a=>a.kind!=='cash');assert.equal(F.spendingSupport(F.assetReport(s,'2026-09-30').totals.net,p).months,5);
+ s.assets.find(a=>a.kind==='debt').snapshots[0].value=3000000;
+ const debt=F.spendingSupport(F.assetReport(s,'2026-09-30').totals.net,p);assert.equal(debt.days,0);assert.equal(debt.months,0);assert.equal(debt.deficit,true);
+});
+
+test('daily and 30-day monthly estimates handle partial months, zero expenses and overflow',()=>{
+ const s=F.blank();s.transactions=[tx(210000)];const p=F.spendingPace(s,'2026-10-01','2026-10-21');
+ assert.equal(p.daily,10000);assert.equal(p.monthly,300000);assert.equal(F.spendingSupport(100000,p).days,10);
+ s.transactions=[];const empty=F.spendingPace(s,p.start,p.end);assert.equal(empty.daily,0);assert.equal(empty.monthly,0);assert.match(F.spendingSupport(100000,empty).reason,/暂无正值支出/);
+ s.transactions=[tx(Number.MAX_SAFE_INTEGER)];const huge=F.spendingPace(s,'2026-10-01','2026-10-01');assert.equal(huge.monthly,null);assert.equal(F.spendingSupport(Number.MAX_SAFE_INTEGER,huge).days,1);
+});
 test('salary coverage uses gross after-tax pay and distinguishes work-hour wage from true hourly wage',()=>{
  const s=fixture(),p=F.spendingPace(s,'2026-10-01','2026-10-31'),r=F.salaryComparison(s,p,'2026-10-19');
  assert.equal(p.hourly,100);assert.equal(r.wageHourly,6000);assert.equal(r.realHourly,2400);

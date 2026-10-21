@@ -98,12 +98,14 @@
     let total=0n;for(const t of rows){if(!Number.isSafeInteger(t.amount)||t.amount<0)throw Error('支出金额无效');total+=BigInt(t.amount);}
     const expense=total<=BigInt(Number.MAX_SAFE_INTEGER)?Number(total):null;
     return {start,end,days,durationMinutes,count:rows.length,recordedDays:new Set(rows.map(t=>t.date)).size,expense,
+      daily:expense===null?null:expense/days,monthly:expense===null||expense/days*30>Number.MAX_SAFE_INTEGER?null:expense/days*30,
       hourly:expense===null?null:expense/(days*24),reason:expense===null?'支出合计超出计算范围':total===0n?'暂无正值支出，暂不能估算续航':''};
   }
   function spendingSupport(amount,pace) {
     if(!Number.isSafeInteger(amount))return {reason:'金额合计超出计算范围'};
     if(pace.reason)return {reason:pace.reason};
-    return {deficit:amount<0,...energyFraction(BigInt(Math.max(0,amount))*BigInt(pace.durationMinutes),BigInt(pace.expense))};
+    const duration=energyFraction(BigInt(Math.max(0,amount))*BigInt(pace.durationMinutes),BigInt(pace.expense));
+    return {deficit:amount<0,...duration,days:duration.reason?null:duration.minutesRounded/1440,months:duration.reason?null:duration.minutesRounded/43200};
   }
   function salaryComparison(state,pace,at) {
     let ref;try{ref=energyReference(state,at);}catch(e){return {reason:e.message};}if(!ref?.profile)return {reason:'设置生效的工资档案后，可比较工资与开支'};

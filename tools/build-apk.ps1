@@ -21,13 +21,13 @@ if (!(Test-Path -LiteralPath $taskPlatform)) { throw 'Run node tools/fetch-andro
 New-Item -ItemType Directory -Force -Path $taskOut,$taskClasses,$taskDex | Out-Null
 $taskCompiled = Join-Path $taskOut 'resources.zip'
 $taskUnsigned = Join-Path $taskOut 'unsigned.apk'
-$taskApk = Join-Path $taskOut 'SquirrelFin-0.1.33.apk'
+$taskApk = Join-Path $taskOut 'SquirrelFin-0.1.34.apk'
 $taskManifest = Join-Path $taskOut 'AndroidManifest.xml'
 $taskManifestText = Get-Content -LiteralPath (Join-Path $taskRoot 'app\src\main\AndroidManifest.xml') -Raw -Encoding utf8
 $taskManifestText = $taskManifestText.Replace('<manifest xmlns:android=', '<manifest package="com.squirrelfin.app" xmlns:android=')
 Set-Content -LiteralPath $taskManifest -Value $taskManifestText -Encoding utf8
 Run-Checked (Join-Path $taskTools 'aapt2.exe') @('compile','--dir',(Join-Path $taskRoot 'app\src\main\res'),'-o',$taskCompiled)
-Run-Checked (Join-Path $taskTools 'aapt2.exe') @('link','-o',$taskUnsigned,'--manifest',$taskManifest,'-I',$taskPlatform,'-A',(Join-Path $taskRoot 'app\src\main\assets'),'-R',$taskCompiled,'--min-sdk-version','26','--target-sdk-version','35','--version-code','34','--version-name','0.1.33')
+Run-Checked (Join-Path $taskTools 'aapt2.exe') @('link','-o',$taskUnsigned,'--manifest',$taskManifest,'-I',$taskPlatform,'-A',(Join-Path $taskRoot 'app\src\main\assets'),'-R',$taskCompiled,'--min-sdk-version','26','--target-sdk-version','35','--version-code','35','--version-name','0.1.34')
 Run-Checked (Join-Path $Jdk 'bin\javac.exe') @('-g:none','-encoding','UTF-8','-source','8','-target','8','-classpath',$taskPlatform,'-d',$taskClasses,(Join-Path $taskRoot 'app\src\main\java\com\squirrelfin\app\MainActivity.java'),(Join-Path $taskRoot 'app\src\main\java\com\squirrelfin\app\Updater.java'),(Join-Path $taskRoot 'app\src\main\java\com\squirrelfin\app\UpdateProvider.java'))
 $taskClassFiles = @(Get-ChildItem -LiteralPath $taskClasses -Recurse -Filter '*.class' | ForEach-Object { $_.FullName })
 Run-Checked (Join-Path $Jdk 'bin\java.exe') (@('-cp',(Join-Path $taskTools 'lib\d8.jar'),'com.android.tools.r8.D8','--lib',$taskPlatform,'--min-api','26','--output',$taskDex) + $taskClassFiles)
